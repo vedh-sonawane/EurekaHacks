@@ -1,16 +1,13 @@
 import unittest
 from function import openai_request
 import cv2
-from aiohttp import ClientSession
 
 class OpenAIRequestUnitTest(unittest.IsolatedAsyncioTestCase):
 	async def _analyze_images(self, images: list):
-		async with ClientSession() as session:
-			return await openai_request.analyze_images(session, images)
+		return await openai_request.analyze_images(images)
 
 	async def _analyze_transcript(self, transcript: str):
-		async with ClientSession() as session:
-			return await openai_request.analyze_transcript(session, transcript)
+		return await openai_request.analyze_transcript(transcript)
 
 	async def test_send_request_image(self):
 		# Read the image using OpenCV

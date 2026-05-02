@@ -1,14 +1,13 @@
 import json
 
 class VideoAnalysisTestObject():
-	def __init__(self, user: str, video_id: str, should_contain: list[str]):
-		self.user = user
+	def __init__(self, video_id: str, should_contain: list[str]):
 		self.id = video_id
 		# should_contains describes what the resulting analysis should have once done
 		self.should_contain = should_contain
 
 	def get_video_url(self):
-		return f"https://www.tiktok.com/{self.user}/video/{self.id}"
+		return f"https://www.youtube.com/watch?v={self.id}"
 
 def get_test_video_urls() -> list[VideoAnalysisTestObject]:
 	"""
@@ -21,7 +20,6 @@ def get_test_video_urls() -> list[VideoAnalysisTestObject]:
 	for test_video in data:
 		test_videos.append(
 			VideoAnalysisTestObject(
-				user=test_video["user"],
 				video_id=test_video["video_id"],
 				should_contain=test_video["should_contain"]
 			)

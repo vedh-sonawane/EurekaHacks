@@ -23,12 +23,28 @@ def setup_logger(name, filename, level=logging.DEBUG):
 
 	return logger
 
-def verify_tiktok_url(video_url: str) -> tuple[bool, str, list[str]]:
+def verify_youtube_url(video_url: str) -> tuple[bool, str, str]:
 	parsed_url = urlparse(video_url)
-	if "tiktok.com" not in parsed_url.hostname:
-		return False, "Invalid TikTok URL - provided URL is not from TikTok", None
-	paths = parsed_url.path.split("/")
-	if len(paths) < 4:
-		return False, "Invalid TikTok URL - bad format", None
+	hostname = parsed_url.hostname or ""
 
-	return True, None, paths
+	if "youtube.com" in hostname:
+		# /shorts/VIDEO_ID or /watch?v=VIDEO_ID
+		paths = parsed_url.path.split("/")
+		if "shorts" in paths:
+			idx = paths.index("shorts")
+			if idx + 1 < len(paths) and paths[idx + 1]:
+				return True, None, paths[idx + 1]
+		video_id = parsed_url.query
+		# parse ?v=... manually
+		for param in parsed_url.query.split("&"):
+			if param.startswith("v="):
+				return True, None, param[2:]
+		return False, "Invalid YouTube URL - could not extract video ID", None
+
+	if "youtu.be" in hostname:
+		video_id = parsed_url.path.lstrip("/")
+		if video_id:
+			return True, None, video_id
+		return False, "Invalid YouTube URL - could not extract video ID", None
+
+	return False, "Invalid YouTube URL - not a YouTube link", None

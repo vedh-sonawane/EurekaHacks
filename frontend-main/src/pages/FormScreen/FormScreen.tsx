@@ -57,19 +57,49 @@ const TAG_KEYWORDS: Partial<Record<ActivityTag, string[]>> = {
   [ActivityTag.WinterSports]:       ['skiing', 'snowboard', 'winter sport', 'snow', 'ski resort'],
 };
 
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 function inferTags(title: string): ActivityTag[] {
   const lower = title.toLowerCase();
   return ALL_TAGS.filter(tag => TAG_KEYWORDS[tag]?.some(kw => lower.includes(kw)));
 }
 
-function buildExtraQuery(weights: Record<string, number>, seasons: Season[]): string {
-  const topTags = Object.entries(weights)
-    .filter(([, w]) => w > 0.5)
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, 3)
-    .map(([tag]) => tag.toLowerCase());
-  return [...seasons.map(s => s.toLowerCase()), ...topTags].filter(Boolean).join(' ');
-}
+// Best YouTube search term for each activity — these produce far better short-form results
+// than lowercasing the enum display value (e.g. "food tour" beats "dining", "historical sites" beats "history")
+const TAG_SEARCH_TERMS: Partial<Record<ActivityTag, string>> = {
+  [ActivityTag.Sightseeing]:        'sightseeing',
+  [ActivityTag.Beach]:              'beach',
+  [ActivityTag.Hiking]:             'hiking',
+  [ActivityTag.Shopping]:           'shopping',
+  [ActivityTag.Dining]:             'food tour',
+  [ActivityTag.Museum]:             'museum',
+  [ActivityTag.Adventure]:          'adventure',
+  [ActivityTag.Relaxation]:         'relaxation',
+  [ActivityTag.Nightlife]:          'nightlife',
+  [ActivityTag.Wildlife]:           'wildlife',
+  [ActivityTag.CulturalExperience]: 'cultural experience',
+  [ActivityTag.Sports]:             'sports',
+  [ActivityTag.Festival]:           'festival',
+  [ActivityTag.RoadTrip]:           'road trip',
+  [ActivityTag.Camping]:            'camping',
+  [ActivityTag.Cruise]:             'cruise',
+  [ActivityTag.Spa]:                'spa wellness',
+  [ActivityTag.Photography]:        'photography spots',
+  [ActivityTag.Entertainment]:      'entertainment',
+  [ActivityTag.History]:            'historical sites',
+  [ActivityTag.FamilyFun]:          'family friendly',
+  [ActivityTag.ThemePark]:          'theme park',
+  [ActivityTag.WaterSports]:        'water sports',
+  [ActivityTag.WinterSports]:       'winter sports',
+};
+
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
 const s: Record<string, React.CSSProperties> = {
@@ -204,9 +234,26 @@ function SwipeStep({ location, initialTags, seasons, onDone }: {
   const weights = useRef<Record<string, number>>(
     Object.fromEntries(ALL_TAGS.map(tag => [tag, initialTags.includes(tag) ? 1.0 : 0.3]))
   );
-  const pageRef  = useRef(0);
-  const fetching = useRef(false);
-  const seenIds  = useRef(new Set<string>());
+  const pageRef       = useRef(Math.floor(Math.random() * 6));
+  const activityIndex = useRef(0);
+  const fetching      = useRef(false);
+  const seenIds       = useRef(new Set<string>());
+
+  // Returns season(s) + ONE activity term per call, rotating through the user's
+  // selected vibes by weight. Each fetch is a focused single-activity query
+  // (e.g. "Tokyo summer beach") rather than a diluted multi-term blob.
+  const getNextExtra = () => {
+    const rankedActivities = Object.entries(weights.current)
+      .filter(([, w]) => w > 0.5)
+      .sort(([, a], [, b]) => b - a)
+      .map(([tag]) => TAG_SEARCH_TERMS[tag as ActivityTag] ?? tag.toLowerCase())
+      .filter(Boolean);
+    const seasonTerms = seasons.map(s => s.toLowerCase()).join(' ');
+    if (rankedActivities.length === 0) return seasonTerms;
+    const activity = rankedActivities[activityIndex.current % rankedActivities.length];
+    activityIndex.current++;
+    return [seasonTerms, activity].filter(Boolean).join(' ');
+  };
 
   // Subsequent-page fetcher (refills queue when running low).
   // Separate from the initial load so the StrictMode double-invoke
@@ -215,10 +262,10 @@ function SwipeStep({ location, initialTags, seasons, onDone }: {
     if (fetching.current) return;
     fetching.current = true;
     try {
-      const extra = buildExtraQuery(weights.current, seasons);
+      const extra = getNextExtra();
       const items = await fetchShorts(location, pageRef.current, extra);
       pageRef.current++;
-      const fresh = items.filter(v => !seenIds.current.has(v.videoId));
+      const fresh = shuffle(items.filter(v => !seenIds.current.has(v.videoId)));
       fresh.forEach(v => seenIds.current.add(v.videoId));
       if (fresh.length > 0) setQueue(prev => [...prev, ...fresh]);
     } catch {
@@ -232,13 +279,14 @@ function SwipeStep({ location, initialTags, seasons, onDone }: {
   // doesn't fire setLoading(false) before the real fetch completes.
   useEffect(() => {
     let active = true;
+    const startPage = pageRef.current;
+    const extra = getNextExtra();
     (async () => {
       try {
-        const extra = buildExtraQuery(weights.current, seasons);
-        const items = await fetchShorts(location, 0, extra);
+        const items = await fetchShorts(location, startPage, extra);
         if (!active) return;
-        pageRef.current = 1;
-        const fresh = items.filter(v => !seenIds.current.has(v.videoId));
+        pageRef.current = startPage + 1;
+        const fresh = shuffle(items.filter(v => !seenIds.current.has(v.videoId)));
         fresh.forEach(v => seenIds.current.add(v.videoId));
         if (fresh.length > 0) setQueue(fresh);
         else setError("No videos found for this location.");
@@ -286,6 +334,8 @@ function SwipeStep({ location, initialTags, seasons, onDone }: {
     if (animTimeout.current || loading || queue.length === 0) return;
     const current = queue[index];
     updateWeights(current, dir);
+    // On love: immediately fetch more with updated weights, don't wait for queue to run low
+    if (dir === "right") fetchMore();
     setAnimDir(dir);
     animTimeout.current = setTimeout(() => {
       const newLiked = dir === "right" ? [...liked, current.videoId] : liked;
@@ -408,11 +458,13 @@ function ReviewStep({
   likedVideos,
   onBack,
   onGenerate,
+  generating,
 }: {
   tripData: TripData;
   likedVideos: string[];
   onBack: () => void;
   onGenerate: () => void;
+  generating?: boolean;
 }) {
   return (
     <div style={s.card}>
@@ -452,7 +504,9 @@ function ReviewStep({
 
       <div style={{ display: "flex", gap: "1rem" }}>
         <button style={s.btnGhost} onClick={onBack}>← Back</button>
-        <button style={{ ...s.btn, flex: 1 }} onClick={onGenerate}>✈️ Generate My Itinerary</button>
+        <button style={{ ...s.btn, flex: 1, opacity: generating ? 0.6 : 1 }} onClick={onGenerate} disabled={generating}>
+          {generating ? "Generating…" : "✈️ Generate My Itinerary"}
+        </button>
       </div>
     </div>
   );
@@ -464,12 +518,41 @@ export default function FormScreen() {
   const [step,        setStep]        = useState(0);
   const [tripData,    setTripData]    = useState<TripData | null>(null);
   const [likedVideos, setLikedVideos] = useState<string[]>([]);
+  const [generating,  setGenerating]  = useState(false);
 
-  const handleGenerate = () => {
-    const itinerary = MOCK_ITINERARY(tripData!.location, tripData!.tags.map(String));
-    localStorage.setItem("itinerary",     JSON.stringify(itinerary));
-    localStorage.setItem("liked_videos",  JSON.stringify(likedVideos));
-    navigate("/your-trip");
+  const handleGenerate = async () => {
+    setGenerating(true);
+    try {
+      const prompt = [
+        "Create a one-day travel plan",
+        ` - Location: ${tripData!.location}`,
+        " - Start time: 08:00",
+        " - End time: 21:00",
+        ` - Activities: ${tripData!.tags.join(', ')}`,
+        tripData!.seasons.length > 0 ? ` - Season: ${tripData!.seasons.join(', ')}` : null,
+        tripData!.comments ? ` - Special notes: ${tripData!.comments}` : null,
+      ].filter(Boolean).join('\n');
+
+      const videoUrls = likedVideos.map(id => `https://www.youtube.com/watch?v=${id}`).join(',');
+      const params = new URLSearchParams({ prompt });
+      if (videoUrls) params.set('video_urls', videoUrls);
+
+      const res = await fetch(`/itinerary-api/generate_itinerary?${params}`, { method: 'POST' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const itinerary = { location: tripData!.location, ...data.itinerary };
+      localStorage.setItem("itinerary",    JSON.stringify(itinerary));
+      localStorage.setItem("liked_videos", JSON.stringify(likedVideos));
+      navigate("/your-trip");
+    } catch (e) {
+      console.error("Itinerary backend unavailable, using mock:", e);
+      const itinerary = MOCK_ITINERARY(tripData!.location, tripData!.tags.map(String));
+      localStorage.setItem("itinerary",    JSON.stringify(itinerary));
+      localStorage.setItem("liked_videos", JSON.stringify(likedVideos));
+      navigate("/your-trip");
+    } finally {
+      setGenerating(false);
+    }
   };
 
   return (
@@ -492,6 +575,7 @@ export default function FormScreen() {
           likedVideos={likedVideos}
           onBack={() => setStep(1)}
           onGenerate={handleGenerate}
+          generating={generating}
         />
       )}
     </div>

@@ -69,7 +69,7 @@ export default function YourTripScreen() {
         <hr style={{ border: "none", borderTop: "1px solid #1e1e1e", marginBottom: "2.5rem" }} />
 
         {/* Two-column activity grid on PC */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(380px, 1fr))", gap: "1.2rem", position: "relative" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "1.2rem" }}>
           {itinerary.activities.map((act, i) => (
             <div key={i} style={{ display: "flex", gap: "1rem", alignItems: "flex-start" }}>
               <div style={{

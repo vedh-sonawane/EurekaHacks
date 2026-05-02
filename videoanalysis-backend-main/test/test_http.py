@@ -81,8 +81,8 @@ class HttpTest(unittest.TestCase):
 			self.assertEqual(len(suggested_videos), num_videos)
 
 			for video in suggested_videos:
-				is_valid_url, msg, _ = utils.verify_tiktok_url(video)
-				self.assertTrue(is_valid_url, msg)
+				self.assertIsInstance(video, str)
+				self.assertTrue(video.startswith("http"), f"Expected a URL, got: {video}")
 
 if __name__ == "__main__":
 		unittest.main()

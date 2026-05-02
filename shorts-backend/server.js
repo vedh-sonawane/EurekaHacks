@@ -52,14 +52,15 @@ function ytdlp(args, timeoutMs = 40_000) {
 
 // ── Feed ────────────────────────────────────────────────────────────────────
 
-// Keywords that surface high-quality destination content
+// Rotation keywords appended to "location + activity terms" — kept short so the
+// activity-specific extra query (beach, food tour, hiking, etc.) stays dominant
 const SEARCH_KEYWORDS = [
-  'travel guide',
   'things to do',
   'travel vlog',
   'hidden gems',
-  'must visit',
-  'travel tips',
+  'best spots',
+  'must see',
+  'local guide',
 ];
 
 // YouTube's protobuf filter for Shorts-only search results
@@ -76,8 +77,8 @@ async function getFeed(page, location, extra = '') {
   const kwRound  = Math.floor(page / SEARCH_KEYWORDS.length);
   const kw       = SEARCH_KEYWORDS[kwIndex];
   const query    = [location, extra, kw].filter(Boolean).join(' ');
-  const start    = kwRound * 20 + 1;   // 1, 21, 41, 61 … per keyword cycle
-  const end      = start + 39;
+  const start    = kwRound * 8 + 1;    // 1, 9, 17, 25 … per keyword cycle
+  const end      = start + 19;
   const cacheKey = `${query}:${start}`;
   const hit      = feedCache.get(cacheKey);
   if (hit && Date.now() - hit.ts < FEED_TTL_MS) return hit.items;
@@ -95,22 +96,29 @@ async function getFeed(page, location, extra = '') {
     '--playlist-items', `${start}-${end}`,
   ], 45_000);
 
-  const items = raw
+  // Take top 12 by views, then shuffle so each session sees a different order
+  const pool = raw
     .filter(v => v.id && v.duration != null && v.duration > 1 && v.duration <= 90)
     .filter(v => v.view_count == null || v.view_count >= MIN_VIEWS)
     .sort((a, b) => (b.view_count ?? 0) - (a.view_count ?? 0))
-    .slice(0, 20)
-    .map(v => ({
-      videoId:   v.id,
-      title:     v.title || '',
-      thumbnail: `https://i.ytimg.com/vi/${v.id}/maxresdefault.jpg`,
-      uploader:  v.uploader || v.channel || v.uploader_id || '',
-      viewCount: v.view_count ?? null,
-      duration:  v.duration,
-    }));
+    .slice(0, 12);
+
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+
+  const items = pool.slice(0, 8).map(v => ({
+    videoId:   v.id,
+    title:     v.title || '',
+    thumbnail: `https://i.ytimg.com/vi/${v.id}/maxresdefault.jpg`,
+    uploader:  v.uploader || v.channel || v.uploader_id || '',
+    viewCount: v.view_count ?? null,
+    duration:  v.duration,
+  }));
 
   feedCache.set(cacheKey, { items, ts: Date.now() });
-  console.log(`  ✓ page ${page} "${query}": ${items.length} shorts (filtered from ${raw.length})`);
+  console.log(`  ✓ page ${page} "${query}": ${items.length} shorts (pool ${pool.length}, raw ${raw.length})`);
 
   // Warm up CDN URLs for the first few videos before the client asks
   items.slice(0, 4).forEach(item => getStreamUrl(item.videoId).catch(() => {}));

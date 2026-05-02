@@ -4,8 +4,7 @@ import cv2
 from function import openai_request 
 from yt_dlp import YoutubeDL
 from urllib.parse import urlparse
-from dataclasses import dataclass, field
-from aiohttp import ClientSession
+from dataclasses import dataclass
 import asyncio
 from function import utils
 import time
@@ -26,15 +25,11 @@ ydl_transcript_opts = {
 }
 
 @dataclass
-class _TikTokVideoObject:
+class _YouTubeVideoObject:
 	id: str
-	user: str
-	# path: str = ""
-	# metadata: dict[str, str] = field(default_factory=dict)
-	# transcript_path: str = ""
 
 	def get_clean_url(self) -> str:
-		return f"https://www.tiktok.com/{ self.user }/video/{ self.id }"
+		return f"https://www.youtube.com/watch?v={self.id}"
 
 async def analyze_from_urls(
 		video_urls: list[str],
@@ -53,31 +48,26 @@ async def analyze_from_urls(
 	# in the given video_urls
 	video_analysis: list[dict] = []
 
-	# Use async to speed up requests from open_ai
-	async with ClientSession() as session:
-		# TODO: there's probably better way to manage this but idfk
-		tasks = []
-		for video_url in video_urls:
-			logger.info(f"Analyzing: { video_url }")
-			tasks.append(
-				analyze_from_url(
-					session=session,
-					video_url=video_url,
-					num_frames_to_sample=num_frames_to_sample,
-					metadata_fields=metadata_fields
-				)
+	tasks = []
+	for video_url in video_urls:
+		logger.info(f"Analyzing: { video_url }")
+		tasks.append(
+			analyze_from_url(
+				video_url=video_url,
+				num_frames_to_sample=num_frames_to_sample,
+				metadata_fields=metadata_fields
 			)
-		results = await asyncio.gather(*tasks)
+		)
+	results = await asyncio.gather(*tasks)
 
-		# verify overall results and return whatever we can even if things fail
-		overall_result = True
-		for result, analysis in results:
-			overall_result &= result
-			video_analysis.append(analysis)
-		return overall_result, video_analysis
+	# verify overall results and return whatever we can even if things fail
+	overall_result = True
+	for result, analysis in results:
+		overall_result &= result
+		video_analysis.append(analysis)
+	return overall_result, video_analysis
 
 async def analyze_from_url(
-		session: ClientSession,
 		video_url: str,
 		num_frames_to_sample: int = 5,
 		metadata_fields: list[str] = []
@@ -88,14 +78,14 @@ async def analyze_from_url(
 		videos.
 	"""
 	# Checking for validity of url
-	is_valid_url, msg, paths = utils.verify_tiktok_url(video_url)
+	is_valid_url, msg, video_id = utils.verify_youtube_url(video_url)
 
 	if not is_valid_url:
 		logger.info(f"{msg}: { video_url }")
 		return False, {"error": msg}
 
 	# If it's good, then we continue
-	vid_obj = _TikTokVideoObject(id=paths[3], user=paths[1])
+	vid_obj = _YouTubeVideoObject(id=video_id)
 	
 	# Flag to switch to using video
 	use_video = False
@@ -109,7 +99,6 @@ async def analyze_from_url(
 		else:
 			# Start analyzing process 
 			result, data = await analyze_from_transcript(
-				session,
 				transcript_path,
 				metadata
 			)
@@ -126,7 +115,6 @@ async def analyze_from_url(
 			else:
 				# Start analyzing process 
 				result, data = await analyze_from_path(
-					session,
 					video_path,
 					num_frames_to_sample,
 					metadata
@@ -147,7 +135,6 @@ async def analyze_from_url(
 		return False, {"error": "Error when analyzing"}
 
 async def analyze_from_path(
-		session: ClientSession,
 		video_path: str,
 		num_frames_to_sample: int = 5,
 		metadata: dict[str, str] = {}
@@ -162,7 +149,6 @@ async def analyze_from_path(
 		return (False, str(e))
 
 	analysis = await openai_request.analyze_images(
-			session=session,
 			images=frames,
 			metadata=metadata
 		)
@@ -170,17 +156,15 @@ async def analyze_from_path(
 	return (True, analysis)
 
 async def analyze_from_transcript(
-		session: ClientSession,
 		transcript_path: str,
 		metadata: dict[str, str] = {}
 	) -> tuple[bool, dict]:
 	"""
-		Analyze a video from its video path and metadata (optional)
+		Analyze a video from its transcript path and metadata (optional)
 	"""
 	transcript = _trim_transcript_vtt(transcript_path)
 
 	analysis = await openai_request.analyze_transcript(
-			session=session,
 			transcript=transcript,
 			metadata=metadata
 		)
