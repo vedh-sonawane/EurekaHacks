@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, useLocation } from "react-route
 import GetStartedScreen from "./pages/GetStartedScreen/GetStartedScreen";
 import FormScreen from "./pages/FormScreen/FormScreen";
 import YourTripScreen from "./pages/YourTripScreen/YourTripScreen";
+import SavedTripsScreen from "./pages/SavedTripsScreen/SavedTripsScreen";
 import "./App.css";
 import "./m3.css";
 
@@ -30,6 +31,7 @@ function AppShell() {
           <Route path="/" element={<GetStartedScreen />} />
           <Route path="/create-trip" element={<FormScreen />} />
           <Route path="/your-trip" element={<YourTripScreen />} />
+          <Route path="/my-trips" element={<SavedTripsScreen />} />
         </Routes>
       </div>
     </div>

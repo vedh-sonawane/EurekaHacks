@@ -1,6 +1,8 @@
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
+import { useAuth0 } from "@auth0/auth0-react";
 import { Sym, M3IconBtn, M3Button } from "../../components/M3";
+import { saveItinerary } from "../../utils/api";
 
 interface Activity {
   startTime: string;
@@ -45,9 +47,11 @@ function inferIcon(activity: string): string {
 
 export default function YourTripScreen() {
   const navigate = useNavigate();
+  const { getAccessTokenSilently } = useAuth0();
   const [itinerary, setItinerary] = useState<Itinerary | null>(null);
   const [likedCount, setLikedCount] = useState(0);
-  const [savedSnack, setSavedSnack] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [snack, setSnack] = useState<{ msg: string; ok: boolean } | null>(null);
 
   useEffect(() => {
     const raw = localStorage.getItem("itinerary");
@@ -56,9 +60,23 @@ export default function YourTripScreen() {
     if (liked) setLikedCount(JSON.parse(liked).length);
   }, []);
 
-  const handleShare = () => {
-    setSavedSnack(true);
-    setTimeout(() => setSavedSnack(false), 2200);
+  const showSnack = (msg: string, ok = true) => {
+    setSnack({ msg, ok });
+    setTimeout(() => setSnack(null), 2400);
+  };
+
+  const handleSave = async () => {
+    if (!itinerary) return;
+    setSaving(true);
+    try {
+      const token = await getAccessTokenSilently();
+      await saveItinerary(itinerary as unknown as Record<string, unknown>, token);
+      showSnack("Trip saved to your account");
+    } catch {
+      showSnack("Couldn't save — are you signed in?", false);
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (!itinerary) {
@@ -87,7 +105,7 @@ export default function YourTripScreen() {
       <div className="m3-appbar">
         <M3IconBtn icon="arrow_back" onClick={() => navigate("/")} />
         <div className="title">Your trip</div>
-        <M3IconBtn icon="ios_share" onClick={handleShare} />
+        <M3IconBtn icon="bookmark" onClick={handleSave} disabled={saving} />
         <M3IconBtn icon="more_vert" />
       </div>
 
@@ -225,10 +243,10 @@ export default function YourTripScreen() {
       </div>
 
       {/* Snackbar */}
-      {savedSnack && (
+      {snack && (
         <div style={{ position: "fixed", left: "50%", bottom: 24, transform: "translateX(-50%)", zIndex: 30 }}>
           <div className="m3-snackbar">
-            <Sym name="check_circle" size={18} fill={1} /> Trip saved · share link copied
+            <Sym name={snack.ok ? "check_circle" : "error"} size={18} fill={1} /> {snack.msg}
           </div>
         </div>
       )}

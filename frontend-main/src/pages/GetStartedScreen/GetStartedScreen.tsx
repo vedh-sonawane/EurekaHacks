@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import { useAuth0 } from "@auth0/auth0-react";
 import { Sym, M3Button, M3IconBtn } from "../../components/M3";
 import wallpaper from "../../assets/wallpaper.jpg";
 
@@ -37,6 +38,7 @@ const HOW_IT_WORKS = [
 
 export default function GetStartedScreen() {
   const navigate = useNavigate();
+  const { isAuthenticated, isLoading, loginWithRedirect, logout, user } = useAuth0();
 
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", overflow: "auto" }}>
@@ -46,7 +48,19 @@ export default function GetStartedScreen() {
           <img src="/swipeandfly-icon-color.png" alt="Soar" style={{ width: 36, height: 36, borderRadius: 10 }} />
           <span style={{ fontSize: 18, fontWeight: 600, letterSpacing: "-0.01em" }}>Soar</span>
         </div>
-        <M3IconBtn icon="account_circle" />
+        {!isLoading && (
+          isAuthenticated ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <M3Button variant="text" icon="luggage" onClick={() => navigate("/my-trips")}>My trips</M3Button>
+              {user?.picture
+                ? <img src={user.picture} alt="avatar" onClick={() => logout({ logoutParams: { returnTo: window.location.origin } })} style={{ width: 36, height: 36, borderRadius: "50%", cursor: "pointer", marginRight: 8 }} />
+                : <M3IconBtn icon="logout" onClick={() => logout({ logoutParams: { returnTo: window.location.origin } })} />
+              }
+            </div>
+          ) : (
+            <M3Button variant="text" icon="login" onClick={() => { console.log("auth state:", { isLoading, isAuthenticated }); loginWithRedirect({ authorizationParams: { prompt: "login" } }).catch(console.error); }} style={{ marginRight: 8 }}>Sign in</M3Button>
+          )
+        )}
       </div>
 
       <div style={{ padding: "12px 24px 32px", display: "flex", flexDirection: "column", gap: 32 }}>

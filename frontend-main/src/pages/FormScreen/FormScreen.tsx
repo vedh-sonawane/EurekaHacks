@@ -378,13 +378,30 @@ function SwipeStep({
   useEffect(() => {
     let active = true;
     const startPage = pageRef.current;
-    const extra = getNextExtra();
+
+    // Build 3 different query flavors from the user's top tags for variety on first load
+    const tagExtras = [
+      ...initialTags.map((tag) =>
+        [location, season.toLowerCase(), TAG_SEARCH_TERMS[tag] ?? tag.toLowerCase()].filter(Boolean).join(" ")
+      ),
+      [location, "vacation", season.toLowerCase()].join(" "),
+    ].slice(0, 3);
+    while (tagExtras.length < 3) tagExtras.push([location, "travel", season.toLowerCase()].join(" "));
+
     (async () => {
       try {
-        const items = await fetchShorts(location, startPage, extra);
+        const results = await Promise.all(
+          tagExtras.map((extra, i) => fetchShorts(location, startPage + i, extra))
+        );
         if (!active) return;
-        pageRef.current = startPage + 1;
-        const fresh = spreadSimilar(shuffle(filterRelevant(items.filter((v) => !seenIds.current.has(v.videoId)))));
+        pageRef.current = startPage + 3;
+        const localSeen = new Set<string>();
+        const allItems = results.flat().filter((v) => {
+          if (seenIds.current.has(v.videoId) || localSeen.has(v.videoId)) return false;
+          localSeen.add(v.videoId);
+          return true;
+        });
+        const fresh = spreadSimilar(shuffle(filterRelevant(allItems)));
         fresh.forEach((v) => seenIds.current.add(v.videoId));
         if (fresh.length > 0) setQueue(fresh);
         else setError("No videos found for this location.");

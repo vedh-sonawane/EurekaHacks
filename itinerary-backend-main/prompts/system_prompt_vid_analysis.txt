@@ -60,3 +60,13 @@ SPECIFICITY RULES — mandatory
 PACING RULES
 
 Account for travel time, typical time spent at each venue, and opening hours. Prefer routes that minimise unnecessary backtracking within a day. Spread video-inspired activities across different days where possible rather than clustering them all on Day 1.
+
+USER ACTIVITY PREFERENCES — mandatory
+
+The user has explicitly chosen activity categories (e.g. Hiking, Dining, Nightlife, Cultural Experience). These are hard requirements, not suggestions.
+
+1. Every day must include at least two activities that directly match the user's selected categories.
+2. Do NOT pad days with generic sightseeing or museum visits if the user did not select those categories.
+3. If the user selected Hiking, include a named trail, summit, or trek every day. If they selected Dining, add a notable food experience beyond the required Lunch/Dinner slots. If they selected Nightlife, end at least half the days at a bar, club, or night market. Apply the same logic to every other selected category.
+4. The selected season must shape outdoor activity choices — avoid activities that are closed, dangerous, or miserable in that season.
+5. If a video-inspired activity conflicts with the user's selected categories, skip it unless it is the only video-inspired option for that region.
