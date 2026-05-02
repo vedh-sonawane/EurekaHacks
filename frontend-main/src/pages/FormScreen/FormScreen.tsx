@@ -606,6 +606,126 @@ function SwipeStep({
   );
 }
 
+// ── YouTube step ──────────────────────────────────────────────────────────────
+function extractYouTubeId(url: string): string | null {
+  const patterns = [
+    /[?&]v=([a-zA-Z0-9_-]{11})/,
+    /youtu\.be\/([a-zA-Z0-9_-]{11})/,
+    /\/shorts\/([a-zA-Z0-9_-]{11})/,
+    /embed\/([a-zA-Z0-9_-]{11})/,
+  ];
+  for (const p of patterns) { const m = url.match(p); if (m) return m[1]; }
+  return null;
+}
+
+function YouTubeStep({
+  onDone,
+  onBack,
+}: {
+  onDone: (ids: string[]) => void;
+  onBack: () => void;
+}) {
+  const [input, setInput] = useState("");
+  const [ids, setIds] = useState<string[]>([]);
+  const [error, setError] = useState("");
+
+  const addUrl = () => {
+    const trimmed = input.trim();
+    if (!trimmed) return;
+    const id = extractYouTubeId(trimmed);
+    if (!id) { setError("Couldn't find a YouTube video ID in that URL."); return; }
+    if (ids.includes(id)) { setError("That video is already added."); return; }
+    setIds((prev) => [...prev, id]);
+    setInput("");
+    setError("");
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => { if (e.key === "Enter") { e.preventDefault(); addUrl(); } };
+
+  return (
+    <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+      <div className="m3-appbar">
+        <M3IconBtn icon="arrow_back" onClick={onBack} />
+        <div className="title">Add YouTube videos</div>
+        <div style={{ padding: "0 16px" }}><StepBar step={1} /></div>
+      </div>
+
+      <div style={{ flex: 1, overflow: "auto", padding: "8px 24px 120px", display: "flex", justifyContent: "center" }}>
+        <div style={{ width: "100%", maxWidth: 720, display: "flex", flexDirection: "column", gap: 24 }}>
+          <div>
+            <h1 className="display-font" style={{ fontSize: 36, fontWeight: 500, margin: 0, letterSpacing: "-0.01em" }}>Paste your videos</h1>
+            <p style={{ color: "var(--m3-on-surface-variant)", marginTop: 8, fontSize: 15 }}>
+              Add YouTube links that inspired your trip — we'll build the itinerary from them.
+            </p>
+          </div>
+
+          <div style={{ display: "flex", gap: 10 }}>
+            <div style={{ flex: 1 }}>
+              <M3TextField
+                label="YouTube URL"
+                leadingIcon="smart_display"
+                value={input}
+                onChange={(e) => { setInput((e.target as HTMLInputElement).value); setError(""); }}
+                onKeyDown={handleKeyDown}
+              />
+            </div>
+            <M3Button icon="add" onClick={addUrl} style={{ alignSelf: "flex-start", marginTop: 4 }}>Add</M3Button>
+          </div>
+
+          {error && <p style={{ color: "var(--m3-error)", fontSize: 14, margin: 0 }}>{error}</p>}
+
+          {ids.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ fontSize: 14, fontWeight: 500, color: "var(--m3-on-surface-variant)" }}>{ids.length} video{ids.length !== 1 ? "s" : ""} added</div>
+              {ids.map((id) => (
+                <div
+                  key={id}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 12,
+                    padding: "10px 14px", borderRadius: 12,
+                    background: "var(--m3-surface-container-low)",
+                  }}
+                >
+                  <img
+                    src={`https://img.youtube.com/vi/${id}/default.jpg`}
+                    alt=""
+                    style={{ width: 64, height: 36, objectFit: "cover", borderRadius: 6, flexShrink: 0 }}
+                  />
+                  <span style={{ flex: 1, fontSize: 13, fontFamily: "monospace", color: "var(--m3-on-surface-variant)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    youtube.com/watch?v={id}
+                  </span>
+                  <M3IconBtn icon="close" size={18} onClick={() => setIds((prev) => prev.filter((x) => x !== id))} />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {ids.length === 0 && (
+            <div style={{ textAlign: "center", padding: "40px 0", color: "var(--m3-on-surface-variant)", fontSize: 14 }}>
+              <Sym name="smart_display" size={48} style={{ opacity: 0.3, display: "block", margin: "0 auto 12px" }} />
+              No videos added yet — paste a YouTube link above.
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div
+        style={{
+          position: "sticky", bottom: 0, padding: 16,
+          background: "linear-gradient(to top, var(--m3-surface) 60%, transparent)",
+          display: "flex", justifyContent: "flex-end", gap: 12,
+          borderTop: "1px solid var(--m3-outline-variant)",
+        }}
+      >
+        <M3Button variant="text" onClick={onBack}>Back</M3Button>
+        <M3Button icon="auto_awesome" onClick={() => onDone(ids)} disabled={ids.length === 0}>
+          Build itinerary
+        </M3Button>
+      </div>
+    </div>
+  );
+}
+
 // ── Review step ───────────────────────────────────────────────────────────────
 function ReviewStep({
   tripData,
@@ -713,7 +833,7 @@ function ReviewStep({
 }
 
 // ── Main FormScreen ───────────────────────────────────────────────────────────
-export default function FormScreen() {
+export default function FormScreen({ mode = "reels" }: { mode?: "reels" | "youtube" }) {
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [tripData, setTripData] = useState<TripData | null>(null);
@@ -763,10 +883,16 @@ export default function FormScreen() {
           onBack={() => navigate("/")}
         />
       )}
-      {step === 1 && tripData && (
+      {step === 1 && tripData && mode === "reels" && (
         <SwipeStep
           tripData={tripData}
           onDone={(liked) => { setLikedVideos(liked); setStep(2); }}
+          onBack={() => setStep(0)}
+        />
+      )}
+      {step === 1 && tripData && mode === "youtube" && (
+        <YouTubeStep
+          onDone={(ids) => { setLikedVideos(ids); setStep(2); }}
           onBack={() => setStep(0)}
         />
       )}

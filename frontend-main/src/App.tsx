@@ -30,6 +30,7 @@ function AppShell() {
         <Routes>
           <Route path="/" element={<GetStartedScreen />} />
           <Route path="/create-trip" element={<FormScreen />} />
+          <Route path="/create-trip-youtube" element={<FormScreen mode="youtube" />} />
           <Route path="/your-trip" element={<YourTripScreen />} />
           <Route path="/my-trips" element={<SavedTripsScreen />} />
         </Routes>
