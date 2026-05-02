@@ -71,23 +71,30 @@ EXAMPLE OUTPUT
     "activities": [
         {
             "startTime": "07:00",
-            "endTime": "08:30",
-            "activity": "Breakfast at local cafe",
-            "location": "New York City",
+            "endTime": "08:00",
+            "activity": "Breakfast at Russ & Daughters Cafe",
+            "location": "Russ & Daughters Cafe, 127 Orchard St, Lower East Side, New York",
+            "inspiredBy": null
+        },
+        {
+            "startTime": "08:15",
+            "endTime": "09:00",
+            "activity": "Take subway from Delancey St to 72nd St (C/B line)",
+            "location": "Delancey St–Essex St Station, Lower East Side, New York",
             "inspiredBy": null
         },
         {
             "startTime": "09:00",
             "endTime": "11:00",
-            "activity": "Visit Central Park",
-            "location": "Central Park, Manhattan, New York",
+            "activity": "Walk Jacqueline Kennedy Onassis Reservoir loop",
+            "location": "Jacqueline Kennedy Onassis Reservoir, Central Park, Manhattan, New York",
             "inspiredBy": null
         },
         {
             "startTime": "11:30",
             "endTime": "13:00",
-            "activity": "Lunch at BK Halal Grill",
-            "location": "BK Halal Grill, New York, NY, USA",
+            "activity": "Lunch",
+            "location": "BK Halal Grill, 52nd St & 6th Ave, Midtown, New York",
             "inspiredBy": {
                 "explanation": "Highlighting the unique menu items and great reviews in the TikTok video",
                 "video_url": "https://www.tiktok.com/@drinklinknyc/video/7374836750948076846"
@@ -95,17 +102,20 @@ EXAMPLE OUTPUT
         },
         {
             "startTime": "13:30",
-            "endTime": "15:00",
-            "activity": "Explore Times Square",
-            "location": "Times Square, Manhattan, New York",
+            "endTime": "15:30",
+            "activity": "Walk through Times Square to the High Line",
+            "location": "High Line, West 14th to West 34th St, Chelsea, New York",
             "inspiredBy": null
         },
         {
             "startTime": "15:30",
             "endTime": "17:00",
-            "activity": "Dessert at Magnolia Bakery",
-            "location": "Magnolia Bakery, New York City",
-            "inspiredBy": null
+            "activity": "Banana pudding at Magnolia Bakery",
+            "location": "Magnolia Bakery, 401 Bleecker St, West Village, New York",
+            "inspiredBy": {
+                "explanation": "The reviewer specifically praised Magnolia Bakery and rated it highly",
+                "video_url": "https://www.tiktok.com/@gracietravels/video/7358562655025515818"
+            }
         }
     ]
 }
@@ -115,4 +125,16 @@ NOTES
 Remember that you should include an activity for lunch if times include between 11:00 and 14:00, and dinner if times include between 18:00 and 20:00. These activities should only include the words "Lunch" and "Dinner" in the "activity" field.
 
 When creating a travel plan, remember to take travel times, average time spending at each destination and open hours of each attraction into account. Prefer routes where you have to travel as less as possible.
+
+SPECIFICITY RULES — these are mandatory:
+
+1. Activities must name the exact place or experience. Never write vague phrases like "Explore the area", "Visit local attractions", "Relax for the evening", or "Travel back to city". Instead write the specific thing: "Hike Inariyama Trail to summit", "Visit Senso-ji Temple and Nakamise-dori", "Drinks at Shinjuku Golden Gai".
+
+2. Travel/transit activities must name the exact transport and route. Write "Take Keio Line Express from Takaosanguchi to Shinjuku (50 min)" not "Travel back to city". Write "Walk to Asakusa Station, take Tokyo Metro Ginza Line to Shibuya" not "Travel to next destination".
+
+3. Locations must be specific — include the venue name, neighbourhood, and city at minimum. Never return just a country ("Japan"), a generic area ("Mount Takao area, Japan"), or a vague label ("Local restaurant, Japan"). Use real named locations: "Keio Takaosanguchi Station, Hachioji, Tokyo", "Gonpachi Nishi-Azabu, Minato, Tokyo".
+
+4. Meal locations must be a real, named restaurant or market for that city — never "Local restaurant" or "Nearby cafe". Example: "Afuri Ramen, Harajuku, Tokyo" or "Tsukiji Outer Market, Chuo, Tokyo".
+
+5. Use your knowledge of the destination to suggest real, well-known establishments and specific named trails, streets, districts, and transit lines. If you are not certain of a specific venue, name the street or district instead of a generic label.
 

@@ -3,11 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import logo from "../../assets/logo-no-background.svg";
 
 const NAV_LINKS = [
-  { label: "Plan a Trip", path: "/create-trip", external: false },
-];
-
-const STATIC_LINKS = [
-  { label: "Shorts", href: "/shorts/" },
+  { label: "Plan a Trip", path: "/create-trip" },
 ];
 
 const navBtnStyle = (active: boolean): CSSProperties => ({
@@ -60,15 +56,6 @@ export default function Header() {
             >
               {label}
             </button>
-          ))}
-          {STATIC_LINKS.map(({ label, href }) => (
-            <a
-              key={href}
-              href={href}
-              style={navBtnStyle(location.pathname.startsWith(href))}
-            >
-              {label}
-            </a>
           ))}
         </nav>
       </div>
