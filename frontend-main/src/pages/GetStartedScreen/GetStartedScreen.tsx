@@ -41,6 +41,7 @@ export default function GetStartedScreen() {
   const navigate = useNavigate();
   const { isAuthenticated, isLoading, loginWithRedirect, logout, user } = useAuth0();
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
+  const [avatarError, setAvatarError] = useState(false);
   const avatarRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -67,8 +68,8 @@ export default function GetStartedScreen() {
             <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
               <M3Button variant="text" icon="luggage" onClick={() => navigate("/my-trips")}>My trips</M3Button>
               <div ref={avatarRef} style={{ position: "relative", marginRight: 8 }}>
-                {user?.picture
-                  ? <img src={user.picture} alt="avatar" onClick={() => setAvatarMenuOpen(o => !o)} style={{ width: 36, height: 36, borderRadius: "50%", cursor: "pointer", display: "block" }} />
+                {user?.picture && !avatarError
+                  ? <img src={user.picture} alt="avatar" onClick={() => setAvatarMenuOpen(o => !o)} onError={() => setAvatarError(true)} style={{ width: 36, height: 36, borderRadius: "50%", cursor: "pointer", display: "block" }} />
                   : <M3IconBtn icon="account_circle" onClick={() => setAvatarMenuOpen(o => !o)} />
                 }
                 {avatarMenuOpen && (
