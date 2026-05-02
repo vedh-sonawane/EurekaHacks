@@ -250,6 +250,7 @@ export default function YourTripScreen() {
           </div>
         </div>
       )}
+
     </div>
   );
 }
