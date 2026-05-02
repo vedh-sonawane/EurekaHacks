@@ -197,6 +197,9 @@ function jsonRes(res, body, status = 200) {
 }
 
 const server = http.createServer(async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
   if (req.method !== 'GET') { res.writeHead(405); res.end(); return; }
 
   const url = new URL(req.url, `http://localhost:${PORT}`);
