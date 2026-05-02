@@ -3,11 +3,15 @@ import { useNavigate } from "react-router-dom";
 import { ActivityTag } from "../../utils/types";
 
 const ALL_TAGS = Object.values(ActivityTag);
+const SEASONS  = ['Spring', 'Summer', 'Fall', 'Winter'] as const;
+type Season = typeof SEASONS[number];
 
 type ShortVideo = { videoId: string; title: string; thumbnail: string; uploader: string; viewCount: number | null };
 
-async function fetchShorts(location: string, page = 0): Promise<ShortVideo[]> {
-  const res = await fetch(`/api/feed?page=${page}&location=${encodeURIComponent(location)}`);
+async function fetchShorts(location: string, page = 0, extra = ''): Promise<ShortVideo[]> {
+  const params = new URLSearchParams({ page: String(page), location });
+  if (extra) params.set('extra', extra);
+  const res = await fetch(`/api/feed?${params}`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = await res.json();
   return data.items ?? [];
@@ -24,6 +28,48 @@ const MOCK_ITINERARY = (location: string, tags: string[]) => ({
     { startTime: "19:00", endTime: "21:00", activity: tags.includes("Nightlife") ? "Bar hopping in the nightlife district" : "Dinner at a rooftop restaurant", location: `${location} Skyline Avenue` },
   ],
 });
+
+// ── Tag → keyword map for inferring video content from title ──────────────────
+const TAG_KEYWORDS: Partial<Record<ActivityTag, string[]>> = {
+  [ActivityTag.Sightseeing]:        ['sightseeing', 'landmark', 'monument', 'attractions', 'tourist'],
+  [ActivityTag.Beach]:              ['beach', 'ocean', 'coast', 'surf', 'sand', 'sea'],
+  [ActivityTag.Hiking]:             ['hike', 'hiking', 'trail', 'trek', 'mountain'],
+  [ActivityTag.Shopping]:           ['shopping', 'market', 'shop', 'mall', 'boutique'],
+  [ActivityTag.Dining]:             ['food', 'restaurant', 'eat', 'cuisine', 'dining', 'dish'],
+  [ActivityTag.Museum]:             ['museum', 'gallery', 'art', 'exhibit'],
+  [ActivityTag.Adventure]:          ['adventure', 'extreme', 'thrill', 'adrenaline', 'outdoor'],
+  [ActivityTag.Relaxation]:         ['relax', 'peaceful', 'calm', 'tranquil', 'retreat'],
+  [ActivityTag.Nightlife]:          ['nightlife', 'bar', 'club', 'night', 'party'],
+  [ActivityTag.Wildlife]:           ['wildlife', 'animals', 'safari', 'nature', 'wild'],
+  [ActivityTag.CulturalExperience]: ['culture', 'cultural', 'tradition', 'local', 'temple', 'heritage'],
+  [ActivityTag.Sports]:             ['sport', 'game', 'stadium', 'match', 'sports'],
+  [ActivityTag.Festival]:           ['festival', 'celebration', 'event', 'carnival', 'fair'],
+  [ActivityTag.RoadTrip]:           ['road trip', 'roadtrip', 'drive', 'driving', 'scenic drive'],
+  [ActivityTag.Camping]:            ['camp', 'camping', 'outdoors', 'wilderness', 'tent'],
+  [ActivityTag.Cruise]:             ['cruise', 'ship', 'yacht', 'sailing', 'ferry'],
+  [ActivityTag.Spa]:                ['spa', 'massage', 'wellness', 'hot spring', 'thermal'],
+  [ActivityTag.Photography]:        ['photography', 'photo', 'instagram', 'scenic', 'viewpoint'],
+  [ActivityTag.Entertainment]:      ['entertainment', 'show', 'concert', 'performance', 'theater'],
+  [ActivityTag.History]:            ['history', 'historical', 'ancient', 'heritage', 'ruins'],
+  [ActivityTag.FamilyFun]:          ['family', 'kids', 'family-friendly', 'children', 'playground'],
+  [ActivityTag.ThemePark]:          ['theme park', 'amusement', 'rides', 'disney', 'universal'],
+  [ActivityTag.WaterSports]:        ['surfing', 'diving', 'snorkeling', 'kayak', 'swimming', 'water sport'],
+  [ActivityTag.WinterSports]:       ['skiing', 'snowboard', 'winter sport', 'snow', 'ski resort'],
+};
+
+function inferTags(title: string): ActivityTag[] {
+  const lower = title.toLowerCase();
+  return ALL_TAGS.filter(tag => TAG_KEYWORDS[tag]?.some(kw => lower.includes(kw)));
+}
+
+function buildExtraQuery(weights: Record<string, number>, seasons: Season[]): string {
+  const topTags = Object.entries(weights)
+    .filter(([, w]) => w > 0.5)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 3)
+    .map(([tag]) => tag.toLowerCase());
+  return [...seasons.map(s => s.toLowerCase()), ...topTags].filter(Boolean).join(' ');
+}
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
 const s: Record<string, React.CSSProperties> = {
@@ -57,17 +103,19 @@ function StepBar({ step }: { step: number }) {
 }
 
 // ── Step 1: Trip Details ──────────────────────────────────────────────────────
-type TripData = { location: string; startTime: string; endTime: string; tags: ActivityTag[]; comments: string };
+type TripData = { location: string; seasons: Season[]; tags: ActivityTag[]; comments: string };
 
 function TripDetailsStep({ onNext }: { onNext: (data: TripData) => void }) {
-  const [location,  setLocation]  = useState("");
-  const [startTime, setStartTime] = useState("08:00");
-  const [endTime,   setEndTime]   = useState("21:00");
-  const [tags,      setTags]      = useState<ActivityTag[]>([]);
-  const [comments,  setComments]  = useState("");
-  const [error,     setError]     = useState("");
+  const [location, setLocation] = useState("");
+  const [seasons,  setSeasons]  = useState<Season[]>([]);
+  const [tags,     setTags]     = useState<ActivityTag[]>([]);
+  const [comments, setComments] = useState("");
+  const [error,    setError]    = useState("");
 
-  const toggle = (tag: ActivityTag) =>
+  const toggleSeason = (season: Season) =>
+    setSeasons(prev => prev.includes(season) ? prev.filter(x => x !== season) : [...prev, season]);
+
+  const toggleTag = (tag: ActivityTag) =>
     setTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
 
   const handleNext = () => {
@@ -76,26 +124,29 @@ function TripDetailsStep({ onNext }: { onNext: (data: TripData) => void }) {
       return;
     }
     setError("");
-    onNext({ location, startTime, endTime, tags, comments });
+    onNext({ location, seasons, tags, comments });
   };
 
   return (
     <div style={s.card}>
       <h2 style={{ marginTop: 0, marginBottom: "1.8rem", fontSize: "1.6rem" }}>Where are you going? 🌍</h2>
 
-      {/* Two-column layout for destination + times */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem", marginBottom: "1.5rem" }}>
-        <div style={{ gridColumn: "1 / -1" }}>
-          <label style={s.label}>Destination *</label>
-          <input style={s.input} placeholder="e.g. Tokyo, Japan" value={location} onChange={e => setLocation(e.target.value)} />
-        </div>
-        <div>
-          <label style={s.label}>Start time *</label>
-          <input type="time" style={s.input} value={startTime} onChange={e => setStartTime(e.target.value)} />
-        </div>
-        <div>
-          <label style={s.label}>End time *</label>
-          <input type="time" style={s.input} value={endTime} onChange={e => setEndTime(e.target.value)} />
+      <div style={{ marginBottom: "1.5rem" }}>
+        <label style={s.label}>Destination *</label>
+        <input style={s.input} placeholder="e.g. Tokyo, Japan" value={location} onChange={e => setLocation(e.target.value)} />
+      </div>
+
+      <div style={{ marginBottom: "1.5rem" }}>
+        <label style={s.label}>Season <span style={{ color: "#555" }}>(optional)</span></label>
+        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+          {SEASONS.map(season => (
+            <span key={season} onClick={() => toggleSeason(season)} style={{
+              padding: "0.35rem 0.85rem", borderRadius: "20px", cursor: "pointer", fontSize: "0.85rem",
+              background: seasons.includes(season) ? "#FE2858" : "#2a2a2a",
+              border: `1px solid ${seasons.includes(season) ? "#FE2858" : "#444"}`,
+              color: "white", userSelect: "none", transition: "background 0.15s",
+            }}>{season}</span>
+          ))}
         </div>
       </div>
 
@@ -103,7 +154,7 @@ function TripDetailsStep({ onNext }: { onNext: (data: TripData) => void }) {
         <label style={s.label}>Activity vibes * (pick at least one)</label>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
           {ALL_TAGS.map(tag => (
-            <span key={tag} onClick={() => toggle(tag)} style={{
+            <span key={tag} onClick={() => toggleTag(tag)} style={{
               padding: "0.35rem 0.85rem", borderRadius: "20px", cursor: "pointer", fontSize: "0.85rem",
               background: tags.includes(tag) ? "#FE2858" : "#2a2a2a",
               border: `1px solid ${tags.includes(tag) ? "#FE2858" : "#444"}`,
@@ -133,50 +184,115 @@ function TripDetailsStep({ onNext }: { onNext: (data: TripData) => void }) {
 }
 
 // ── Step 2: Swipe Videos ──────────────────────────────────────────────────────
-function SwipeStep({ location, onDone }: { location: string; onDone: (liked: string[]) => void }) {
-  const [videos,  setVideos]  = useState<ShortVideo[]>([]);
+function SwipeStep({ location, initialTags, seasons, onDone }: {
+  location: string;
+  initialTags: ActivityTag[];
+  seasons: Season[];
+  onDone: (liked: string[]) => void;
+}) {
+  const [queue,   setQueue]   = useState<ShortVideo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState("");
   const [index,   setIndex]   = useState(0);
   const [liked,   setLiked]   = useState<string[]>([]);
   const [animDir, setAnimDir] = useState<"left" | "right" | null>(null);
   const animTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Stable refs for all video elements — never re-created, just src-swapped (mirrors shorts/app.js)
+  // Stable video element refs — never re-created, only src/display toggled (mirrors shorts/app.js)
   const videoRefs = useRef<(HTMLVideoElement | null)[]>([]);
 
-  useEffect(() => {
-    setLoading(true);
-    fetchShorts(location)
-      .then(items => { setVideos(items); setLoading(false); })
-      .catch(() => { setError("Couldn't load shorts — is the shorts backend running? (node shorts-backend/server.js)"); setLoading(false); });
-  }, [location]);
+  // Weight map: tag → score. Selected tags start at 1.0, others at 0.3.
+  const weights = useRef<Record<string, number>>(
+    Object.fromEntries(ALL_TAGS.map(tag => [tag, initialTags.includes(tag) ? 1.0 : 0.3]))
+  );
+  const pageRef  = useRef(0);
+  const fetching = useRef(false);
+  const seenIds  = useRef(new Set<string>());
 
-  // Mirror shorts/app.js prefetchAhead: set src for current + next 2, play current, pause previous
+  // Subsequent-page fetcher (refills queue when running low).
+  // Separate from the initial load so the StrictMode double-invoke
+  // of the mount effect can't race with this and skip setLoading.
+  const fetchMore = async () => {
+    if (fetching.current) return;
+    fetching.current = true;
+    try {
+      const extra = buildExtraQuery(weights.current, seasons);
+      const items = await fetchShorts(location, pageRef.current, extra);
+      pageRef.current++;
+      const fresh = items.filter(v => !seenIds.current.has(v.videoId));
+      fresh.forEach(v => seenIds.current.add(v.videoId));
+      if (fresh.length > 0) setQueue(prev => [...prev, ...fresh]);
+    } catch {
+      // silent — keep existing queue for refill failures
+    } finally {
+      fetching.current = false;
+    }
+  };
+
+  // Initial load — uses an `active` flag so React StrictMode's double-invoke
+  // doesn't fire setLoading(false) before the real fetch completes.
   useEffect(() => {
-    if (videos.length === 0) return;
+    let active = true;
+    (async () => {
+      try {
+        const extra = buildExtraQuery(weights.current, seasons);
+        const items = await fetchShorts(location, 0, extra);
+        if (!active) return;
+        pageRef.current = 1;
+        const fresh = items.filter(v => !seenIds.current.has(v.videoId));
+        fresh.forEach(v => seenIds.current.add(v.videoId));
+        if (fresh.length > 0) setQueue(fresh);
+        else setError("No videos found for this location.");
+      } catch {
+        if (active) setError("Couldn't load shorts — is the shorts backend running? (node shorts-backend/server.js)");
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => { active = false; };
+  }, []);
+
+  // Mirror shorts/app.js: prefetch next 2, play current, pause previous
+  useEffect(() => {
+    if (queue.length === 0) return;
     for (let ahead = 1; ahead <= 2; ahead++) {
       const el = videoRefs.current[index + ahead];
-      const v  = videos[index + ahead];
+      const v  = queue[index + ahead];
       if (el && v && !el.src) el.src = `/api/proxy?v=${v.videoId}`;
     }
     const currentEl = videoRefs.current[index];
     if (currentEl) {
-      if (!currentEl.src) currentEl.src = `/api/proxy?v=${videos[index].videoId}`;
+      if (!currentEl.src) currentEl.src = `/api/proxy?v=${queue[index].videoId}`;
       currentEl.play().catch(() => {});
     }
     if (index > 0) videoRefs.current[index - 1]?.pause();
-  }, [index, videos]);
+    // Refill feed when running low — uses updated weights so next batch is better targeted
+    if (queue.length - index <= 5) fetchMore();
+  }, [index, queue]);
+
+  // Update weights on each swipe, then let the next fetchMore use the new weights.
+  // Tags inferred from the video title that differ from the user's stated preferences
+  // get a heavier demerit on dislike, so the feed shifts away from them faster.
+  const updateWeights = (video: ShortVideo, dir: "left" | "right") => {
+    inferTags(video.title).forEach(tag => {
+      const w           = weights.current[tag] ?? 0.3;
+      const isDifferent = !initialTags.includes(tag);
+      weights.current[tag] = dir === "right"
+        ? Math.min(2.0, w + 0.3)
+        : Math.max(0.0, w - (isDifferent ? 0.5 : 0.3));
+    });
+  };
 
   const swipe = (dir: "left" | "right") => {
-    if (animTimeout.current || loading || videos.length === 0) return;
-    const currentId = videos[index].videoId;
+    if (animTimeout.current || loading || queue.length === 0) return;
+    const current = queue[index];
+    updateWeights(current, dir);
     setAnimDir(dir);
     animTimeout.current = setTimeout(() => {
-      const newLiked = dir === "right" ? [...liked, currentId] : liked;
+      const newLiked = dir === "right" ? [...liked, current.videoId] : liked;
       if (dir === "right") setLiked(newLiked);
       setAnimDir(null);
       animTimeout.current = null;
-      if (index + 1 >= videos.length) {
+      if (index + 1 >= queue.length) {
         onDone(newLiked);
       } else {
         setIndex(i => i + 1);
@@ -184,10 +300,10 @@ function SwipeStep({ location, onDone }: { location: string; onDone: (liked: str
     }, 350);
   };
 
-  if (index >= videos.length && !loading) { onDone(liked); return null; }
+  if (!loading && queue.length > 0 && index >= queue.length) { onDone(liked); return null; }
 
-  const current = videos[index];
-  const remaining = videos.length - index;
+  const current   = queue[index];
+  const remaining = queue.length - index;
 
   const cardAnim: React.CSSProperties = {
     transition: "transform 0.35s ease, opacity 0.35s ease",
@@ -199,7 +315,7 @@ function SwipeStep({ location, onDone }: { location: string; onDone: (liked: str
     <div style={{ ...s.card, maxWidth: "900px", display: "grid", gridTemplateColumns: "340px 1fr", gap: "3rem", alignItems: "center" }}>
       {/* Left: video card */}
       <div style={{ position: "relative" }}>
-        {current && index + 1 < videos.length && (
+        {current && index + 1 < queue.length && (
           <div style={{ position: "absolute", inset: "8px -4px -8px", background: "#222", borderRadius: "16px", zIndex: 0 }} />
         )}
         <div style={{ ...cardAnim, position: "relative", zIndex: 1 }}>
@@ -213,9 +329,9 @@ function SwipeStep({ location, onDone }: { location: string; onDone: (liked: str
                 {error}
               </div>
             ) : (
-              // All video elements are kept in the DOM with stable keys (position index).
-              // Only the current one is visible; src is set lazily via refs — no re-mounts on swipe.
-              videos.map((v, i) => (
+              // All video elements kept in DOM with stable position-based keys.
+              // Only the current one is visible; src is set lazily — no re-mounts on swipe.
+              queue.map((_, i) => (
                 <video
                   key={i}
                   ref={el => { videoRefs.current[i] = el; }}
@@ -306,7 +422,9 @@ function ReviewStep({
       <div style={{ display: "grid", gridTemplateColumns: likedVideos.length > 0 ? "1fr 1fr" : "1fr", gap: "2rem", marginBottom: "2rem" }}>
         <div style={{ background: "#111", borderRadius: "10px", padding: "1.2rem", lineHeight: 2.2 }}>
           <div><span style={{ color: "#888" }}>Destination:</span> <strong>{tripData.location}</strong></div>
-          <div><span style={{ color: "#888" }}>Time:</span> <strong>{tripData.startTime} – {tripData.endTime}</strong></div>
+          {tripData.seasons.length > 0 && (
+            <div><span style={{ color: "#888" }}>Season:</span> <strong>{tripData.seasons.join(", ")}</strong></div>
+          )}
           <div><span style={{ color: "#888" }}>Vibes:</span> <strong>{tripData.tags.join(", ")}</strong></div>
           {tripData.comments && <div><span style={{ color: "#888" }}>Notes:</span> <strong>{tripData.comments}</strong></div>}
           <div><span style={{ color: "#888" }}>Videos liked:</span> <strong>{likedVideos.length}</strong></div>
@@ -361,7 +479,12 @@ export default function FormScreen() {
         <TripDetailsStep onNext={data => { setTripData(data); setStep(1); }} />
       )}
       {step === 1 && tripData && (
-        <SwipeStep location={tripData.location} onDone={liked => { setLikedVideos(liked); setStep(2); }} />
+        <SwipeStep
+          location={tripData.location}
+          initialTags={tripData.tags}
+          seasons={tripData.seasons}
+          onDone={liked => { setLikedVideos(liked); setStep(2); }}
+        />
       )}
       {step === 2 && tripData && (
         <ReviewStep

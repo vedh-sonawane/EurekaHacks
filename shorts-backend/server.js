@@ -71,11 +71,11 @@ const MIN_VIEWS = 100_000;
 const feedCache   = new Map(); // cacheKey → { items, ts }
 const FEED_TTL_MS = 20 * 60 * 1000; // 20 min
 
-async function getFeed(page, location) {
+async function getFeed(page, location, extra = '') {
   const kwIndex  = page % SEARCH_KEYWORDS.length;
   const kwRound  = Math.floor(page / SEARCH_KEYWORDS.length);
   const kw       = SEARCH_KEYWORDS[kwIndex];
-  const query    = `${location} ${kw}`;
+  const query    = [location, extra, kw].filter(Boolean).join(' ');
   const start    = kwRound * 20 + 1;   // 1, 21, 41, 61 … per keyword cycle
   const end      = start + 39;
   const cacheKey = `${query}:${start}`;
@@ -178,9 +178,10 @@ const server = http.createServer(async (req, res) => {
   if (p === '/api/feed') {
     const page     = Math.max(0, parseInt(url.searchParams.get('page') || '0', 10));
     const location = (url.searchParams.get('location') || '').trim().slice(0, 60);
+    const extra    = (url.searchParams.get('extra') || '').trim().slice(0, 120);
     if (!location) { jsonRes(res, { items: [], error: 'location required' }, 400); return; }
     try {
-      const items = await getFeed(page, location);
+      const items = await getFeed(page, location, extra);
       jsonRes(res, { items });
     } catch (e) {
       console.error('[feed]', e.message);
