@@ -1,5 +1,8 @@
 # Soar
 
+<img width="2000" height="2000" alt="blue logo no bg" src="https://github.com/user-attachments/assets/1c9f4416-3c63-4ecc-867b-fbd67dde1aff" />
+
+
 > **Swipe travel videos. Get perfect itinerary.**
 
 Soar is an travel planner that turns your YouTube Shorts feed into a personalised day-by-day itinerary. Swipe right on videos that match your vibe, and Gemini 2.5 Flash caters to you a specific travel plan inspired by what you liked and avoids what you disliked.
