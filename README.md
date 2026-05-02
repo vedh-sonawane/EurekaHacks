@@ -1,4 +1,16 @@
-# Soar — AI Travel Planner
+# Soar
+> **Swipe travel videos. Get a real itinerary.**
+
+<img width="1920" height="1080" alt="1" src="https://github.com/user-attachments/assets/d34c1e8e-6dde-413e-bad4-3f04b432f270" />
+
+Soar is a travel planner that turns YouTube Shorts into a personalised day-by-day itinerary. Pick a destination, swipe through Shorts curated for your location and activity vibes, and Gemini 2.5 Flash builds a specific, timed plan inspired by what you liked.
+
+---
+
+## The Problem
+
+Planning a trip is overwhelming. You spend hours watching travel content, saving videos, reading blogs — and still end up with a generic itinerary that could have been written in 2019.
+
 
 Soar lets you build a day-by-day travel itinerary by swiping through YouTube Shorts. Like the videos that match your vibe, skip the rest, and get a personalised itinerary powered by Gemini AI.
 
@@ -6,9 +18,9 @@ Soar lets you build a day-by-day travel itinerary by swiping through YouTube Sho
 
 ## How it works
 
-1. **Tell us where** — pick a destination, trip length, season, and activity vibes (hiking, dining, nightlife, etc.)
-2. **Swipe the shorts** — a curated feed of location-specific YouTube Shorts plays in a card deck; swipe right to like, left to skip. The feed adapts in real time based on what you engage with.
-3. **Get the itinerary** — liked video URLs are sent to the AI backend, which generates a detailed day-by-day plan grounded in the specific venues and neighbourhoods from those videos.
+1. **Tell us where**: pick a destination, trip length, season, and activity vibes (hiking, dining, nightlife, etc.)
+2. **Swipe the shorts**: a curated feed of location-specific YouTube Shorts plays in a card deck; swipe right to like, left to skip. The feed adapts in real time based on what you engage with.
+3. **Get the itinerary**: liked video URLs are sent to the AI backend, which generates a detailed day-by-day plan grounded in the specific venues and neighbourhoods from those videos.
 
 There is also a **YouTube mode** that pulls from your own liked videos, favourites, and playlists instead of the live Shorts feed.
 
@@ -152,31 +164,3 @@ The `public/_redirects` file is included for Netlify-style SPA deployments. For 
 The two backends can be deployed as standard WSGI (Flask via `wsgi.py`) and Node.js processes respectively. Make sure the frontend's proxy targets are updated to the production URLs, or configure your reverse proxy (nginx, Caddy, etc.) to route `/api/*` and `/itinerary-api/*` to the correct services.
 
 ---
-
-## Project structure
-
-```
-frontend-main/
-  src/
-    components/M3.tsx           Material Design 3 component library
-    pages/
-      GetStartedScreen/         Landing page
-      FormScreen/               Trip form + swipe feed (multi-step)
-      YourTripScreen/           Generated itinerary view
-      SavedTripsScreen/         User's saved trips
-      OAuthCallback.tsx         Auth0 redirect handler
-    utils/
-      api.ts                    Itinerary backend API client
-      types.ts                  Shared TypeScript types (ActivityTag enum)
-      youtube.ts                YouTube Data API v3 helpers
-
-itinerary-backend-main/
-  server.py                     Flask app + all routes
-  wsgi.py                       WSGI entry point for production
-  prompts/
-    system_prompt_vid_analysis.txt   Gemini system prompt
-    prompt_with_vid_analysis.txt     Gemini user prompt template
-
-shorts-backend/
-  server.js                     Node.js Shorts feed + proxy server
-```
