@@ -1,21 +1,20 @@
 # Soar
+
 > **Swipe travel videos. Get perfect itinerary.**
 
 <img width="2000" height="2000" alt="blue logo no bg" src="https://github.com/user-attachments/assets/1c9f4416-3c63-4ecc-867b-fbd67dde1aff" />
-
-
-
 
 Soar is an travel planner that turns your YouTube Shorts feed into a personalised day-by-day itinerary. Swipe right on videos that match your vibe, and Gemini 2.5 Flash caters to you a specific travel plan inspired by what you liked and avoids what you disliked.
 
 ---
 
-##  The Problem
+## The Problem
+
 Planning a trip is overwhelming. You spend hours researching travel content, blogs, videos, articles, saving videos, and then still end up with a generic itinerary like a blog post written in 2019.
 
 ---
 
-##  How It Works
+## How It Works
 
 ```
 User swipes YouTube Shorts
@@ -68,12 +67,12 @@ Rendered in the React frontend
                   └──────────────────────┘
 ```
 
-| Service | Stack | Responsibility |
-|---|---|---|
-| **Frontend** | React 18, TypeScript, Vite | 3-step trip builder, swipe UI, itinerary display |
-| **Shorts Backend** | Node.js, yt-dlp | Fetch & proxy YouTube Shorts by location/activity query |
-| **Itinerary Backend** | Python, Flask, Gemini 2.5 Flash | Generate structured day plans from user prefs + video analysis |
-| **Video Analysis Backend** | Python, Flask, OpenCV, Gemini Vision | Sample video frames, extract location & activity context |
+| Service                    | Stack                                | Responsibility                                                 |
+| -------------------------- | ------------------------------------ | -------------------------------------------------------------- |
+| **Frontend**               | React 18, TypeScript, Vite           | 3-step trip builder, swipe UI, itinerary display               |
+| **Shorts Backend**         | Node.js, yt-dlp                      | Fetch & proxy YouTube Shorts by location/activity query        |
+| **Itinerary Backend**      | Python, Flask, Gemini 2.5 Flash      | Generate structured day plans from user prefs + video analysis |
+| **Video Analysis Backend** | Python, Flask, OpenCV, Gemini Vision | Sample video frames, extract location & activity context       |
 
 ---
 
@@ -121,7 +120,7 @@ pip install yt-dlp
 ```bash
 cd videoanalysis-backend-main
 python -m venv venv
-source venv/bin/activate       
+source venv/bin/activate
 venv\Scripts\activate
 pip install -r requirements.txt
 ```

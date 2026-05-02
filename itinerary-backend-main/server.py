@@ -84,6 +84,7 @@ def require_auth(f):
         except Exception:
             return jsonify({"error": "Invalid token"}), 401
         return f(*args, **kwargs)
+
     return decorated
 
 
@@ -91,6 +92,7 @@ def get_supabase():
     global _supabase_client
     if _supabase_client is None:
         from supabase import create_client
+
         _supabase_client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
     return _supabase_client
 
@@ -104,22 +106,6 @@ API calls setups
 def gemini_api_call(user_prompt, system_prompt):
     response = _model.generate_content(f"{system_prompt}\n\n{user_prompt}")
     return response.text
-
-
-# Get a response from video analysis API
-def video_analysis_call(videos, dev=False):
-    api_json = json.dumps(
-        {"video_urls": videos, "num_frames_to_sample": NUM_FRAMES_TO_SAMPLE}
-    )
-    url = (
-        os.environ["VIDEO_ANALYSIS_DEV_URL"]
-        if dev == True
-        else os.environ["VIDEO_ANALYSIS_PROD_URL"]
-    )
-    response = requests.post(
-        url=url, headers={"Content-Type": "application/json"}, data=api_json
-    )
-    return response
 
 
 def filter_skit(data):
@@ -154,52 +140,70 @@ def index():
     return jsonify("Hello world"), HTTP_OK
 
 
+# @app.route("/generate_itinerary", methods=["POST"])
+# def generate_itinerary():
+#     args_user_prompt = request.args.get("prompt")
+#     if not args_user_prompt:
+#         return jsonify({"error": "No prompt found"}), HTTP_BAD_REQUEST
+
+#     video_urls_param = request.args.get("video_urls", "")
+#     videos = [v for v in video_urls_param.split(",") if v.strip()]
+
+#     if len(videos) > 5:
+#         videos = random.sample(videos, 5)
+
+#     video_summary = "The user have not specified any videos."
+
+#     if videos:
+#         lines = []
+#         for i, url in enumerate(videos):
+#             lines.append(f"Video {i + 1}:\n" f"  URL: {url}")
+#         video_summary = "\n\n".join(lines)
+
+
 @app.route("/generate_itinerary", methods=["POST"])
 def generate_itinerary():
-    args_user_prompt = request.args.get("prompt")
-    if not args_user_prompt:
-        return jsonify({"error": "No prompt found"}), HTTP_BAD_REQUEST
+    try:
+        args_user_prompt = request.args.get("prompt")
+        if not args_user_prompt:
+            return jsonify({"error": "No prompt found"}), HTTP_BAD_REQUEST
 
-    video_urls_param = request.args.get("video_urls", "")
-    videos = [v for v in video_urls_param.split(",") if v.strip()]
+        video_urls_param = request.args.get("video_urls", "")
+        videos = [v for v in video_urls_param.split(",") if v.strip()]
 
-    if len(videos) > 5:
-        videos = random.sample(videos, 5)
+        if len(videos) > 5:
+            videos = random.sample(videos, 5)
 
-    video_summary = "The user have not specified any videos."
-    if videos:
-        try:
-            response = video_analysis_call(videos, dev=False)
-            if response.status_code == HTTP_OK:
-                analyses = response.json()["video_analysis"]
-                lines = []
-                for i, item in enumerate(analyses):
-                    url = videos[i] if i < len(videos) else "unknown"
-                    content = item.get("content", "") if isinstance(item, dict) else str(item)
-                    location = item.get("location", "") if isinstance(item, dict) else ""
-                    lines.append(
-                        f"Video {i + 1}:\n"
-                        f"  URL: {url}\n"
-                        f"  Content: {content}\n"
-                        f"  Location: {location}"
-                    )
-                video_summary = "\n\n".join(lines)
-        except Exception as e:
-            print(f"Video analysis failed, skipping: {e}")
+        video_summary = "The user have not specified any videos."
 
-    with open("./prompts/system_prompt_vid_analysis.txt", "r") as f:
-        system_prompt = f.read()
-    with open("./prompts/prompt_with_vid_analysis.txt", "r") as f:
-        user_prompt_template = f.read()
-    user_prompt = user_prompt_template.replace(
-        "<user_prompt>", args_user_prompt
-    ).replace("<video_analysis>", video_summary)
+        if videos:
+            lines = []
+            for i, url in enumerate(videos):
+                lines.append(f"Video {i + 1}:\n  URL: {url}")
+            video_summary = "\n\n".join(lines)
 
-    itinerary_str = gemini_api_call(user_prompt, system_prompt)
-    itinerary_data = json.loads(itinerary_str)
-    itinerary_data = filter_skit(itinerary_data)
+        # 🔽 YOU DELETED EVERYTHING BELOW — THIS IS REQUIRED
 
-    return jsonify({"itinerary": itinerary_data}), HTTP_CREATED
+        with open("./prompts/system_prompt_vid_analysis.txt", "r") as f:
+            system_prompt = f.read()
+
+        with open("./prompts/prompt_with_vid_analysis.txt", "r") as f:
+            user_prompt_template = f.read()
+
+        user_prompt = user_prompt_template.replace(
+            "<user_prompt>", args_user_prompt
+        ).replace("<video_analysis>", video_summary)
+
+        itinerary_str = gemini_api_call(user_prompt, system_prompt)
+
+        itinerary_data = json.loads(itinerary_str)
+        itinerary_data = filter_skit(itinerary_data)
+
+        return jsonify({"itinerary": itinerary_data}), HTTP_CREATED
+
+    except Exception as e:
+        print("ERROR:", e)
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/save_itinerary", methods=["POST"])
