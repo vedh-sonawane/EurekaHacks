@@ -14,6 +14,8 @@ const { URL } = require('url');
 
 const PORT  = parseInt(process.env.PORT || '3000', 10);
 const YTDLP = (() => {
+  const local = require('path').join(__dirname, 'yt-dlp');
+  if (require('fs').existsSync(local)) return local;
   try { return execSync('which yt-dlp', { encoding: 'utf8' }).trim(); }
   catch { return 'yt-dlp'; }
 })();
