@@ -115,7 +115,7 @@ async function getFeed(page, location, extra = '') {
     '--no-warnings',
     '--quiet',
     '--playlist-items', `${start}-${end}`,
-  ], 45_000);
+  ], 20_000);
 
   // Keep videos that clear the 100k view floor.
   // Shuffle randomly — don't rank by views so 100k–500k videos get equal exposure.
@@ -165,15 +165,15 @@ function getStreamUrl(videoId) {
       `https://www.youtube.com/watch?v=${videoId}`,
       '--dump-json', '--no-warnings', '--quiet',
       '-f',
-      'best[height<=1080][ext=mp4][vcodec!=none][acodec!=none]' +     // best combined ≤1080p mp4
-      '/22' +                                                           // 720p combined mp4 (YouTube format code)
-      '/best[height<=720][ext=mp4][vcodec!=none][acodec!=none]' +     // any 720p combined mp4
-      '/best[height<=480][ext=mp4][vcodec!=none][acodec!=none]' +     // 480p combined mp4
-      '/18' +                                                          // 360p combined mp4 (YouTube format code)
-      '/best[ext=mp4][vcodec!=none][acodec!=none]' +                  // any combined mp4
-      '/best[vcodec!=none][acodec!=none]' +                           // any combined stream
+      'best[height<=1080][ext=mp4][vcodec!=none][acodec!=none]' +
+      '/22' +
+      '/best[height<=720][ext=mp4][vcodec!=none][acodec!=none]' +
+      '/best[height<=480][ext=mp4][vcodec!=none][acodec!=none]' +
+      '/18' +
+      '/best[ext=mp4][vcodec!=none][acodec!=none]' +
+      '/best[vcodec!=none][acodec!=none]' +
       '/best',
-    ], 30_000);
+    ], 20_000);
 
     if (!info?.url) throw new Error('no url');
     streamCache.set(videoId, { url: info.url, ts: Date.now() });
@@ -202,11 +202,20 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type',
 };
 
+const REQUEST_TIMEOUT_MS = 35_000;
+
 const server = http.createServer(async (req, res) => {
   // Stamp CORS on every response unconditionally
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  // Hard deadline so Railway's proxy never times out before us
+  const deadline = setTimeout(() => {
+    if (!res.headersSent) jsonRes(res, { items: [], error: 'request timeout' }, 504);
+  }, REQUEST_TIMEOUT_MS);
+
+  res.on('finish', () => clearTimeout(deadline));
 
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
   if (req.method !== 'GET') { res.writeHead(405); res.end(); return; }
@@ -225,7 +234,7 @@ const server = http.createServer(async (req, res) => {
       jsonRes(res, { items });
     } catch (e) {
       console.error('[feed]', e.message);
-      jsonRes(res, { items: [], error: e.message }, 502);
+      if (!res.headersSent) jsonRes(res, { items: [], error: e.message }, 502);
     }
     return;
   }
@@ -236,11 +245,13 @@ const server = http.createServer(async (req, res) => {
     if (!/^[A-Za-z0-9_-]{5,15}$/.test(v)) { res.writeHead(400); res.end('bad id'); return; }
     try {
       const cdnUrl = await getStreamUrl(v);
-      res.writeHead(302, { ...CORS_HEADERS, 'Location': cdnUrl, 'Cache-Control': 'no-store' });
-      res.end();
+      if (!res.headersSent) {
+        res.writeHead(302, { ...CORS_HEADERS, 'Location': cdnUrl, 'Cache-Control': 'no-store' });
+        res.end();
+      }
     } catch (e) {
       console.error('[proxy]', v, e.message);
-      res.writeHead(502); res.end('unavailable');
+      if (!res.headersSent) { res.writeHead(502, CORS_HEADERS); res.end('unavailable'); }
     }
     return;
   }
