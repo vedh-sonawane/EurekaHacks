@@ -171,7 +171,19 @@ def generate_itinerary():
         try:
             response = video_analysis_call(videos, dev=False)
             if response.status_code == HTTP_OK:
-                video_summary = str(response.json()["video_analysis"])
+                analyses = response.json()["video_analysis"]
+                lines = []
+                for i, item in enumerate(analyses):
+                    url = videos[i] if i < len(videos) else "unknown"
+                    content = item.get("content", "") if isinstance(item, dict) else str(item)
+                    location = item.get("location", "") if isinstance(item, dict) else ""
+                    lines.append(
+                        f"Video {i + 1}:\n"
+                        f"  URL: {url}\n"
+                        f"  Content: {content}\n"
+                        f"  Location: {location}"
+                    )
+                video_summary = "\n\n".join(lines)
         except Exception as e:
             print(f"Video analysis failed, skipping: {e}")
 

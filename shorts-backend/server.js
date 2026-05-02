@@ -140,8 +140,8 @@ async function getFeed(page, location, extra = '') {
   feedCache.set(cacheKey, { items, ts: Date.now() });
   console.log(`  ✓ page ${page} "${query}": ${items.length} shorts (pool ${pool.length}, raw ${raw.length})`);
 
-  // Warm up CDN URLs for the first few videos before the client asks
-  items.slice(0, 4).forEach(item => getStreamUrl(item.videoId).catch(() => {}));
+  // Warm up CDN URLs for all returned videos before the client asks
+  items.forEach(item => getStreamUrl(item.videoId).catch(() => {}));
 
   return items;
 }
@@ -235,6 +235,20 @@ const server = http.createServer(async (req, res) => {
     } catch (e) {
       console.error('[feed]', e.message);
       if (!res.headersSent) jsonRes(res, { items: [], error: e.message }, 502);
+    }
+    return;
+  }
+
+  // ── /api/stream-url?v=VIDEO_ID — return direct CDN URL as JSON ──────────
+  if (p === '/api/stream-url') {
+    const v = url.searchParams.get('v') ?? '';
+    if (!/^[A-Za-z0-9_-]{5,15}$/.test(v)) { jsonRes(res, { error: 'bad id' }, 400); return; }
+    try {
+      const streamUrl = await getStreamUrl(v);
+      jsonRes(res, { url: streamUrl });
+    } catch (e) {
+      console.error('[stream-url]', v, e.message);
+      jsonRes(res, { error: 'unavailable' }, 502);
     }
     return;
   }

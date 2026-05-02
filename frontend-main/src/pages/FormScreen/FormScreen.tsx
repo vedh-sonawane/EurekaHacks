@@ -3,6 +3,12 @@ import { ITINERARY_API, SHORTS_API } from "../../utils/config";
 import { useNavigate } from "react-router-dom";
 import { ActivityTag } from "../../utils/types";
 import { Sym, M3Button, M3IconBtn, M3FAB, M3Chip, M3TextField, M3Segmented, StepBar } from "../../components/M3";
+import {
+  requestYouTubeToken,
+  fetchLikedVideos,
+  fetchFavoriteVideos,
+  fetchUserPlaylists,
+} from "../../utils/youtube";
 
 const ALL_TAGS = Object.values(ActivityTag);
 const SEASONS = ["Spring", "Summer", "Fall", "Winter"] as const;
@@ -47,21 +53,7 @@ async function fetchShorts(location: string, page = 0, extra = ""): Promise<Shor
   return data.items ?? [];
 }
 
-const MOCK_DAY_ACTIVITIES = (location: string, tags: string[], day: number) => [
-  { startTime: "08:00", endTime: "09:30", activity: "Breakfast at a local café", location: `${location} City Center` },
-  { startTime: "10:00", endTime: "12:00", activity: tags.includes("History") ? `Day ${day} museum visit` : `Morning walk — area ${day}`, location: `${location} District ${day}` },
-  { startTime: "12:30", endTime: "13:30", activity: "Lunch", location: `${location} Market Square ${day}` },
-  { startTime: "14:00", endTime: "16:00", activity: tags.includes("Hiking") ? `Trail ${day}` : tags.includes("Beach") ? `Beach ${day}` : `Gardens ${day}`, location: `${location} Zone ${day}` },
-  { startTime: "19:00", endTime: "21:00", activity: "Dinner", location: `${location} Restaurant Row ${day}` },
-];
 
-const MOCK_ITINERARY = (location: string, tags: string[], days: number) => ({
-  location,
-  days_plan: Array.from({ length: days }, (_, i) => ({
-    day: i + 1,
-    activities: MOCK_DAY_ACTIVITIES(location, tags, i + 1),
-  })),
-});
 
 const TAG_KEYWORDS: Partial<Record<ActivityTag, string[]>> = {
   [ActivityTag.Sightseeing]: ["sightseeing", "landmark", "monument", "attractions", "tourist"],
@@ -332,6 +324,7 @@ function SwipeStep({
   const { location, tags: initialTags, season } = tripData;
   const [queue, setQueue] = useState<ShortVideo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const [index, setIndex] = useState(0);
   const [liked, setLiked] = useState<string[]>([]);
@@ -345,6 +338,15 @@ function SwipeStep({
   const pageRef = useRef(Math.floor(Math.random() * 6));
   const fetching = useRef(false);
   const seenIds = useRef(new Set<string>());
+  const streamUrlCache = useRef(new Map<string, string>());
+
+  const prefetchStreamUrl = (videoId: string) => {
+    if (streamUrlCache.current.has(videoId)) return;
+    fetch(`/api/stream-url?v=${videoId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (data?.url) streamUrlCache.current.set(videoId, data.url); })
+      .catch(() => {});
+  };
 
   const getNextExtra = () => {
     const candidates = Object.entries(weights.current).filter(([, w]) => w > 0.6).sort(([, a], [, b]) => b - a);
@@ -366,6 +368,7 @@ function SwipeStep({
   const fetchMore = async () => {
     if (fetching.current) return;
     fetching.current = true;
+    setLoadingMore(true);
     try {
       const extra = getNextExtra();
       const items = await fetchShorts(location, pageRef.current, extra);
@@ -373,39 +376,27 @@ function SwipeStep({
       const fresh = spreadSimilar(shuffle(filterRelevant(items.filter((v) => !seenIds.current.has(v.videoId)))));
       fresh.forEach((v) => seenIds.current.add(v.videoId));
       if (fresh.length > 0) setQueue((prev) => [...prev, ...fresh]);
-    } catch { /* silent */ } finally { fetching.current = false; }
+    } catch { /* silent */ } finally { fetching.current = false; setLoadingMore(false); }
   };
 
   useEffect(() => {
     let active = true;
     const startPage = pageRef.current;
-
-    // Build 3 different query flavors from the user's top tags for variety on first load
-    const tagExtras = [
-      ...initialTags.map((tag) =>
-        [location, season.toLowerCase(), TAG_SEARCH_TERMS[tag] ?? tag.toLowerCase()].filter(Boolean).join(" ")
-      ),
-      [location, "vacation", season.toLowerCase()].join(" "),
-    ].slice(0, 3);
-    while (tagExtras.length < 3) tagExtras.push([location, "travel", season.toLowerCase()].join(" "));
+    const firstExtra = initialTags.length > 0
+      ? [location, season.toLowerCase(), TAG_SEARCH_TERMS[initialTags[0]] ?? initialTags[0].toLowerCase()].filter(Boolean).join(" ")
+      : [location, "vacation", season.toLowerCase()].join(" ");
 
     (async () => {
       try {
-        const results = await Promise.all(
-          tagExtras.map((extra, i) => fetchShorts(location, startPage + i, extra))
-        );
+        const items = await fetchShorts(location, startPage, firstExtra);
         if (!active) return;
-        pageRef.current = startPage + 3;
-        const localSeen = new Set<string>();
-        const allItems = results.flat().filter((v) => {
-          if (seenIds.current.has(v.videoId) || localSeen.has(v.videoId)) return false;
-          localSeen.add(v.videoId);
-          return true;
-        });
-        const fresh = spreadSimilar(shuffle(filterRelevant(allItems)));
+        pageRef.current = startPage + 1;
+        const fresh = spreadSimilar(shuffle(filterRelevant(
+          items.filter((v) => !seenIds.current.has(v.videoId))
+        )));
         fresh.forEach((v) => seenIds.current.add(v.videoId));
-        if (fresh.length > 0) setQueue(fresh);
-        else setError("No videos found for this location.");
+        if (fresh.length === 0) { setError("No videos found for this location."); return; }
+        setQueue(fresh);
       } catch {
         if (active) setError("Couldn't load shorts — is the shorts backend running?");
       } finally {
@@ -417,6 +408,11 @@ function SwipeStep({
 
   useEffect(() => {
     if (queue.length === 0) return;
+    // Pre-fetch CDN URLs for current + 3 ahead so they're ready before the user swipes
+    for (let ahead = 0; ahead <= 3; ahead++) {
+      const v = queue[index + ahead];
+      if (v) prefetchStreamUrl(v.videoId);
+    }
     for (let ahead = 1; ahead <= 2; ahead++) {
       const el = videoRefs.current[index + ahead];
       const v = queue[index + ahead];
@@ -424,7 +420,11 @@ function SwipeStep({
     }
     const currentEl = videoRefs.current[index];
     if (currentEl) {
-      if (!currentEl.src) currentEl.src = `/api/proxy?v=${queue[index].videoId}`;
+      if (!currentEl.src) {
+        // Use pre-fetched CDN URL directly if available, avoids proxy redirect round-trip
+        const cached = streamUrlCache.current.get(queue[index].videoId);
+        currentEl.src = cached ?? `/api/proxy?v=${queue[index].videoId}`;
+      }
       currentEl.play().catch(() => {});
     }
     if (index > 0) videoRefs.current[index - 1]?.pause();
@@ -440,18 +440,17 @@ function SwipeStep({
   };
 
   const swipe = (dir: "left" | "right") => {
-    if (animTimeout.current || loading || queue.length === 0) return;
+    if (animTimeout.current || loading || queue.length === 0 || index >= queue.length) return;
     const current = queue[index];
     updateWeights(current, dir);
-    if (dir === "right") fetchMore();
+    fetchMore();
     setAnimDir(dir);
     animTimeout.current = setTimeout(() => {
       const newLiked = dir === "right" ? [...liked, current.videoId] : liked;
       if (dir === "right") setLiked(newLiked);
       setAnimDir(null);
       animTimeout.current = null;
-      if (index + 1 >= queue.length) onDone(newLiked);
-      else setIndex((i) => i + 1);
+      setIndex((i) => i + 1);
     }, 350);
   };
 
@@ -464,10 +463,8 @@ function SwipeStep({
     return () => window.removeEventListener("keydown", h);
   });
 
-  if (!loading && queue.length > 0 && index >= queue.length) { onDone(liked); return null; }
-
   const current = queue[index];
-  const remaining = queue.length - index;
+  const remaining = Math.max(0, queue.length - index);
 
   const cardAnim: React.CSSProperties = {
     transition: "transform 0.35s var(--m3-easing-emph), opacity 0.35s var(--m3-easing-emph)",
@@ -521,6 +518,11 @@ function SwipeStep({
                 <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "1.5rem", textAlign: "center", color: "var(--m3-on-surface-variant)", fontSize: 14 }}>
                   {error}
                 </div>
+              ) : index >= queue.length ? (
+                <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 12 }}>
+                  <div className="m3-blob" style={{ width: 80, height: 80, animation: "m3-blob1 4s ease-in-out infinite" }} />
+                  <span style={{ color: "var(--m3-on-surface-variant)", fontSize: 14 }}>Finding more videos…</span>
+                </div>
               ) : (
                 queue.map((_, i) => (
                   <video
@@ -566,7 +568,7 @@ function SwipeStep({
               </div>
               <div style={{ background: "var(--m3-surface-container-low)", borderRadius: 12, padding: "10px 12px" }}>
                 <div style={{ fontSize: 11, color: "var(--m3-on-surface-variant)", textTransform: "uppercase", letterSpacing: ".06em" }}>Remaining</div>
-                <div className="display-font" style={{ fontSize: 24, fontWeight: 500 }}>{loading ? "…" : remaining}</div>
+                <div className="display-font" style={{ fontSize: 24, fontWeight: 500 }}>{loading || loadingMore ? "…" : remaining}</div>
               </div>
             </div>
           </div>
@@ -591,6 +593,246 @@ function SwipeStep({
               I'm done →
             </M3Button>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── YouTube step ──────────────────────────────────────────────────────────────
+// Extract the most specific known-place match from a video title
+function extractDestKey(title: string): string | null {
+  const lower = title.toLowerCase();
+  const matches = KNOWN_PLACES.filter((p) => lower.includes(p));
+  if (matches.length === 0) return null;
+  return matches.sort((a, b) => b.length - a.length)[0];
+}
+
+function toTitleCase(str: string) {
+  return str.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+type DestGroup = { key: string; name: string; videos: import("../../utils/youtube").VideoItem[] };
+
+function groupByDest(allVideos: import("../../utils/youtube").VideoItem[]): {
+  groups: DestGroup[];
+  ungrouped: import("../../utils/youtube").VideoItem[];
+} {
+  const map = new Map<string, import("../../utils/youtube").VideoItem[]>();
+  for (const v of allVideos) {
+    const key = extractDestKey(v.title);
+    if (key) {
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(v);
+    }
+  }
+  const groups: DestGroup[] = Array.from(map.entries())
+    .sort((a, b) => b[1].length - a[1].length)
+    .map(([key, videos]) => ({ key, name: toTitleCase(key), videos }));
+  const groupedIds = new Set(groups.flatMap((g) => g.videos.map((v) => v.id)));
+  const ungrouped = allVideos.filter((v) => !groupedIds.has(v.id));
+  return { groups, ungrouped };
+}
+
+type YTDoneParams = { ids: string[]; titles: string[]; location: string; days: number };
+type YTPhase = "idle" | "connecting" | "fetching" | "pick-dest" | "pick-days" | "error";
+
+function YouTubeStep({
+  onDone,
+  onBack,
+  generating = false,
+}: {
+  onDone: (params: YTDoneParams) => void;
+  onBack: () => void;
+  generating?: boolean;
+}) {
+  const [phase, setPhase] = useState<YTPhase>("idle");
+  const [destGroups, setDestGroups] = useState<DestGroup[]>([]);
+  const [ungrouped, setUngrouped] = useState<import("../../utils/youtube").VideoItem[]>([]);
+  const [selected, setSelected] = useState<DestGroup | null>(null);
+  const [days, setDays] = useState(5);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const handleConnect = async () => {
+    setPhase("connecting");
+    setErrorMsg("");
+    try {
+      const token = await requestYouTubeToken();
+      setPhase("fetching");
+      const [liked, favorites, playlists] = await Promise.all([
+        fetchLikedVideos(token),
+        fetchFavoriteVideos(token),
+        fetchUserPlaylists(token),
+      ]);
+      // Flatten + deduplicate across all sources
+      const seen = new Set<string>();
+      const all = [...liked, ...favorites, ...playlists.flatMap((p) => p.videos)]
+        .filter((v) => { if (seen.has(v.id)) return false; seen.add(v.id); return true; });
+      const { groups, ungrouped: ung } = groupByDest(all);
+      setDestGroups(groups);
+      setUngrouped(ung);
+      setPhase("pick-dest");
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : "Something went wrong.");
+      setPhase("error");
+    }
+  };
+
+  // ── Phase: pick days ──────────────────────────────────────────────────────
+  if (phase === "pick-days" && selected) {
+    return (
+      <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+        <div className="m3-appbar">
+          <M3IconBtn icon="arrow_back" onClick={() => setPhase("pick-dest")} />
+          <div className="title">{selected.name}</div>
+          <div style={{ padding: "0 16px" }}><StepBar step={1} /></div>
+        </div>
+        <div style={{ flex: 1, overflow: "auto", padding: "8px 24px 120px", display: "flex", justifyContent: "center" }}>
+          <div style={{ width: "100%", maxWidth: 720, display: "flex", flexDirection: "column", gap: 28 }}>
+            <div>
+              <h1 className="display-font" style={{ fontSize: 36, fontWeight: 500, margin: 0, letterSpacing: "-0.01em" }}>
+                How long?
+              </h1>
+              <p style={{ color: "var(--m3-on-surface-variant)", marginTop: 8, fontSize: 15 }}>
+                We'll draw from {selected.videos.length} saved video{selected.videos.length !== 1 ? "s" : ""} about {selected.name}.
+              </p>
+            </div>
+            <div>
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 10 }}>
+                <div style={{ fontSize: 14, fontWeight: 500, color: "var(--m3-on-surface-variant)" }}>Trip length</div>
+                <div className="display-font" style={{ fontSize: 28, fontWeight: 500 }}>
+                  {days} <span style={{ fontSize: 14, color: "var(--m3-on-surface-variant)", fontWeight: 400 }}>day{days !== 1 ? "s" : ""}</span>
+                </div>
+              </div>
+              <input type="range" min="1" max="14" value={days} onChange={(e) => setDays(+e.target.value)} />
+            </div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: "var(--m3-on-surface-variant)", marginBottom: 10 }}>
+                Videos we'll draw from
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                {selected.videos.slice(0, 10).map((v, i) => (
+                  <div key={v.id} style={{ display: "flex", gap: 8, alignItems: "baseline", padding: "4px 0", borderBottom: "1px solid var(--m3-outline-variant)" }}>
+                    <span style={{ fontSize: 12, color: "var(--m3-on-surface-variant)", minWidth: 20, flexShrink: 0 }}>{i + 1}.</span>
+                    <span style={{ fontSize: 13, flex: 1 }}>{v.title}</span>
+                    <span style={{ fontSize: 12, color: "var(--m3-on-surface-variant)", flexShrink: 0 }}>{v.channel}</span>
+                  </div>
+                ))}
+                {selected.videos.length > 10 && (
+                  <div style={{ fontSize: 12, color: "var(--m3-on-surface-variant)", padding: "6px 0" }}>
+                    +{selected.videos.length - 10} more
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style={{ position: "sticky", bottom: 0, padding: 16, background: "linear-gradient(to top, var(--m3-surface) 60%, transparent)", display: "flex", justifyContent: "flex-end", gap: 12, borderTop: "1px solid var(--m3-outline-variant)" }}>
+          <M3Button variant="text" onClick={() => setPhase("pick-dest")}>Back</M3Button>
+          <M3Button
+            icon="auto_awesome"
+            disabled={generating}
+            onClick={() => onDone({ ids: selected.videos.map((v) => v.id), titles: selected.videos.map((v) => v.title), location: selected.name, days })}
+          >
+            {generating ? "Generating…" : `Build ${days}-day itinerary`}
+          </M3Button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Phase: idle / connecting / fetching / pick-dest / error ───────────────
+  return (
+    <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+      <div className="m3-appbar">
+        <M3IconBtn icon="arrow_back" onClick={onBack} />
+        <div className="title">Import from YouTube</div>
+        <div style={{ padding: "0 16px" }}><StepBar step={1} /></div>
+      </div>
+      <div style={{ flex: 1, overflow: "auto", padding: "8px 24px 32px", display: "flex", justifyContent: "center" }}>
+        <div style={{ width: "100%", maxWidth: 720, display: "flex", flexDirection: "column", gap: 24 }}>
+          <div>
+            <h1 className="display-font" style={{ fontSize: 36, fontWeight: 500, margin: 0, letterSpacing: "-0.01em" }}>
+              {phase === "pick-dest" ? "Where do you want to go?" : "Connect YouTube"}
+            </h1>
+            <p style={{ color: "var(--m3-on-surface-variant)", marginTop: 8, fontSize: 15 }}>
+              {phase === "pick-dest"
+                ? `Found ${destGroups.length} destination${destGroups.length !== 1 ? "s" : ""} in your library — pick one to plan.`
+                : "We'll scan your liked videos, favorites, and playlists to find travel destinations."}
+            </p>
+          </div>
+
+          {(phase === "idle" || phase === "error") && (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, padding: "40px 24px", borderRadius: "var(--m3-corner-xl)", background: "var(--m3-surface-container-low)", textAlign: "center" }}>
+              <Sym name="smart_display" size={52} fill={1} style={{ color: "var(--m3-primary)", opacity: 0.85 }} />
+              <div>
+                <div style={{ fontWeight: 500, fontSize: 16, marginBottom: 6 }}>Sign in with Google</div>
+                <div style={{ fontSize: 13, color: "var(--m3-on-surface-variant)", maxWidth: 360 }}>
+                  A Google sign-in window will open. We only request read-only access.
+                </div>
+              </div>
+              {errorMsg && <p style={{ color: "var(--m3-error)", fontSize: 13, margin: 0 }}>{errorMsg}</p>}
+              <M3Button icon="login" onClick={handleConnect}>Connect YouTube account</M3Button>
+            </div>
+          )}
+
+          {(phase === "connecting" || phase === "fetching") && (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, padding: "40px 0", color: "var(--m3-on-surface-variant)", fontSize: 14 }}>
+              <div className="m3-blob" style={{ width: 64, height: 64, animation: "m3-blob1 4s ease-in-out infinite" }} />
+              {phase === "connecting" ? "Waiting for Google sign-in…" : "Scanning your videos for destinations…"}
+            </div>
+          )}
+
+          {phase === "pick-dest" && destGroups.length === 0 && (
+            <div style={{ textAlign: "center", padding: "40px 0", color: "var(--m3-on-surface-variant)", fontSize: 14 }}>
+              <Sym name="travel_explore" size={48} style={{ opacity: 0.3, display: "block", margin: "0 auto 12px" }} />
+              No recognizable destinations found in your video titles.
+              <div style={{ marginTop: 16 }}>
+                <M3Button variant="outlined" icon="refresh" onClick={handleConnect}>Try again</M3Button>
+              </div>
+            </div>
+          )}
+
+          {phase === "pick-dest" && destGroups.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {destGroups.map((group) => (
+                <button
+                  key={group.key}
+                  onClick={() => { setSelected(group); setPhase("pick-days"); }}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 16,
+                    padding: "16px 20px", borderRadius: "var(--m3-corner-xl)",
+                    background: "var(--m3-surface-container-low)",
+                    border: "none", cursor: "pointer", textAlign: "left", width: "100%",
+                    transition: "background .15s",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--m3-surface-container)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "var(--m3-surface-container-low)")}
+                >
+                  <Sym name="location_on" size={22} fill={1} style={{ color: "var(--m3-primary)", flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 500, fontSize: 16, color: "var(--m3-on-surface)" }}>{group.name}</div>
+                    <div style={{ fontSize: 12, color: "var(--m3-on-surface-variant)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {group.videos.slice(0, 2).map((v) => v.title).join(" · ")}
+                      {group.videos.length > 2 ? ` · +${group.videos.length - 2} more` : ""}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                    <span style={{ fontSize: 13, color: "var(--m3-on-surface-variant)" }}>{group.videos.length} video{group.videos.length !== 1 ? "s" : ""}</span>
+                    <Sym name="chevron_right" size={20} style={{ color: "var(--m3-on-surface-variant)" }} />
+                  </div>
+                </button>
+              ))}
+              {ungrouped.length > 0 && (
+                <div style={{ fontSize: 12, color: "var(--m3-on-surface-variant)", padding: "6px 4px" }}>
+                  {ungrouped.length} video{ungrouped.length !== 1 ? "s" : ""} didn't match a known destination.
+                </div>
+              )}
+              <M3Button variant="text" icon="refresh" onClick={handleConnect} style={{ alignSelf: "flex-start", marginTop: 4 }}>
+                Rescan
+              </M3Button>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -662,15 +904,14 @@ function ReviewStep({
                 </h2>
                 <M3Button variant="text" icon="refresh" onClick={onBack}>Swipe more</M3Button>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))", gap: 12 }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {likedVideos.map((id) => (
-                  <div key={id} style={{ aspectRatio: "9/16", position: "relative", overflow: "hidden", borderRadius: 16 }}>
-                    <img
-                      src={`https://i.ytimg.com/vi/${id}/hqdefault.jpg`}
-                      alt="liked short"
-                      style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", objectFit: "cover" }}
-                    />
-                  </div>
+                  <img
+                    key={id}
+                    src={`https://img.youtube.com/vi/${id}/mqdefault.jpg`}
+                    alt={id}
+                    style={{ width: 80, height: 120, borderRadius: 8, objectFit: "cover", background: "var(--m3-surface-container-low)" }}
+                  />
                 ))}
               </div>
             </div>
@@ -696,7 +937,7 @@ function ReviewStep({
         <M3Button variant="outlined" icon="arrow_back" onClick={onBack}>Back</M3Button>
         <M3Button
           icon="auto_awesome"
-          onClick={onGenerate}
+          onClick={() => onGenerate()}
           disabled={generating}
           style={{ opacity: generating ? 0.6 : 1 }}
         >
@@ -708,43 +949,55 @@ function ReviewStep({
 }
 
 // ── Main FormScreen ───────────────────────────────────────────────────────────
-export default function FormScreen() {
+export default function FormScreen({ mode = "reels" }: { mode?: "reels" | "youtube" }) {
   const navigate = useNavigate();
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState(mode === "youtube" ? 1 : 0);
   const [tripData, setTripData] = useState<TripData | null>(null);
   const [likedVideos, setLikedVideos] = useState<string[]>([]);
   const [generating, setGenerating] = useState(false);
 
-  const handleGenerate = async () => {
+  const handleGenerate = async (ytParams?: YTDoneParams) => {
     setGenerating(true);
+    const ids = ytParams?.ids ?? likedVideos;
     try {
-      const prompt = [
-        `Create a ${tripData!.days}-day travel plan`,
-        ` - Location: ${tripData!.location}`,
-        " - Start time: 08:00",
-        " - End time: 21:00",
-        ` - Activities: ${tripData!.tags.join(", ")}`,
-        ` - Season: ${tripData!.season}`,
-        tripData!.comments ? ` - Special notes: ${tripData!.comments}` : null,
-      ].filter(Boolean).join("\n");
+      let prompt: string;
+      if (ytParams) {
+        prompt = [
+          `Create a ${ytParams.days}-day travel itinerary for ${ytParams.location}.`,
+          `The traveler's saved YouTube videos about ${ytParams.location}:`,
+          ytParams.titles.slice(0, 20).map((t, i) => `${i + 1}. "${t}"`).join("\n"),
+          "\nBuild a day-by-day plan drawing from the specific places, activities, food, and experiences featured in or implied by these videos. Use real, named locations.",
+        ].join("\n");
+      } else {
+        prompt = [
+          `Create a ${tripData!.days}-day travel plan`,
+          ` - Location: ${tripData!.location}`,
+          " - Start time: 08:00",
+          " - End time: 21:00",
+          ` - Activities: ${tripData!.tags.join(", ")}`,
+          ` - Season: ${tripData!.season}`,
+          tripData!.comments ? ` - Special notes: ${tripData!.comments}` : null,
+        ].filter(Boolean).join("\n");
+      }
 
-      const videoUrls = likedVideos.map((id) => `https://www.youtube.com/watch?v=${id}`).join(",");
+      const videoUrls = ids.map((id) => `https://www.youtube.com/watch?v=${id}`).join(",");
       const params = new URLSearchParams({ prompt });
       if (videoUrls) params.set("video_urls", videoUrls);
 
       const res = await fetch(`${ITINERARY_API}/generate_itinerary?${params}`, { method: "POST" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      const itinerary = { location: tripData!.location, days: tripData!.days, ...data.itinerary };
+      const itinerary = {
+        location: ytParams?.location ?? tripData?.location ?? "Your Trip",
+        days: ytParams?.days ?? tripData?.days ?? 7,
+        ...data.itinerary,
+      };
       localStorage.setItem("itinerary", JSON.stringify(itinerary));
-      localStorage.setItem("liked_videos", JSON.stringify(likedVideos));
+      localStorage.setItem("liked_videos", JSON.stringify(ids));
       navigate("/your-trip");
     } catch (e) {
-      console.error("Itinerary backend unavailable, using mock:", e);
-      const itinerary = MOCK_ITINERARY(tripData!.location, tripData!.tags.map(String), tripData!.days);
-      localStorage.setItem("itinerary", JSON.stringify(itinerary));
-      localStorage.setItem("liked_videos", JSON.stringify(likedVideos));
-      navigate("/your-trip");
+      console.error("Itinerary generation failed:", e);
+      alert(`Couldn't generate itinerary: ${e instanceof Error ? e.message : "Backend error"}. Make sure the itinerary server is running and the API key is valid.`);
     } finally {
       setGenerating(false);
     }
@@ -758,11 +1011,18 @@ export default function FormScreen() {
           onBack={() => navigate("/")}
         />
       )}
-      {step === 1 && tripData && (
+      {step === 1 && tripData && mode === "reels" && (
         <SwipeStep
           tripData={tripData}
           onDone={(liked) => { setLikedVideos(liked); setStep(2); }}
           onBack={() => setStep(0)}
+        />
+      )}
+      {step === 1 && mode === "youtube" && (
+        <YouTubeStep
+          generating={generating}
+          onDone={(params) => handleGenerate(params)}
+          onBack={() => navigate("/")}
         />
       )}
       {step === 2 && tripData && (

@@ -1,5 +1,5 @@
 <user_prompt>
 
-The user have also specified a list of videos, these are the video summaries:
+The user has liked the following videos. Each entry includes the video URL, a content summary, and the location shown in the video. Extract every specific venue name, street, and neighbourhood before planning any activity — these are your geographic anchors for the entire itinerary.
 
 <video_analysis>
