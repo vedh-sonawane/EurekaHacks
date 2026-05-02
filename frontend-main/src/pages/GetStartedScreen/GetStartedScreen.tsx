@@ -130,9 +130,19 @@ export default function GetStartedScreen() {
               Like the travel videos that match your vibe — we'll build a day-by-day
               itinerary you'll actually want to follow.
             </p>
-            <M3Button icon="arrow_forward" onClick={() => navigate("/create-trip")}>
-              Plan a trip
-            </M3Button>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <M3Button icon="swipe" onClick={() => navigate("/create-trip")}>
+                Plan by playing reels
+              </M3Button>
+              <M3Button
+                variant="outlined"
+                icon="smart_display"
+                onClick={() => navigate("/create-trip-youtube")}
+                style={{ background: "rgba(255,255,255,.15)", backdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,.45)", color: "#fff" }}
+              >
+                Make itinerary with YouTube
+              </M3Button>
+            </div>
           </div>
         </div>
 
