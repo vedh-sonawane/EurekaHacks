@@ -2,6 +2,12 @@ import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ActivityTag } from "../../utils/types";
 import { Sym, M3Button, M3IconBtn, M3FAB, M3Chip, M3TextField, M3Segmented, StepBar } from "../../components/M3";
+import {
+  requestYouTubeToken,
+  fetchLikedVideos,
+  fetchFavoriteVideos,
+  fetchUserPlaylists,
+} from "../../utils/youtube";
 
 const ALL_TAGS = Object.values(ActivityTag);
 const SEASONS = ["Spring", "Summer", "Fall", "Winter"] as const;
@@ -607,120 +613,240 @@ function SwipeStep({
 }
 
 // ── YouTube step ──────────────────────────────────────────────────────────────
-function extractYouTubeId(url: string): string | null {
-  const patterns = [
-    /[?&]v=([a-zA-Z0-9_-]{11})/,
-    /youtu\.be\/([a-zA-Z0-9_-]{11})/,
-    /\/shorts\/([a-zA-Z0-9_-]{11})/,
-    /embed\/([a-zA-Z0-9_-]{11})/,
-  ];
-  for (const p of patterns) { const m = url.match(p); if (m) return m[1]; }
-  return null;
+// Extract the most specific known-place match from a video title
+function extractDestKey(title: string): string | null {
+  const lower = title.toLowerCase();
+  const matches = KNOWN_PLACES.filter((p) => lower.includes(p));
+  if (matches.length === 0) return null;
+  return matches.sort((a, b) => b.length - a.length)[0];
 }
+
+function toTitleCase(str: string) {
+  return str.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+type DestGroup = { key: string; name: string; videos: import("../../utils/youtube").VideoItem[] };
+
+function groupByDest(allVideos: import("../../utils/youtube").VideoItem[]): {
+  groups: DestGroup[];
+  ungrouped: import("../../utils/youtube").VideoItem[];
+} {
+  const map = new Map<string, import("../../utils/youtube").VideoItem[]>();
+  for (const v of allVideos) {
+    const key = extractDestKey(v.title);
+    if (key) {
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(v);
+    }
+  }
+  const groups: DestGroup[] = Array.from(map.entries())
+    .sort((a, b) => b[1].length - a[1].length)
+    .map(([key, videos]) => ({ key, name: toTitleCase(key), videos }));
+  const groupedIds = new Set(groups.flatMap((g) => g.videos.map((v) => v.id)));
+  const ungrouped = allVideos.filter((v) => !groupedIds.has(v.id));
+  return { groups, ungrouped };
+}
+
+type YTDoneParams = { ids: string[]; titles: string[]; location: string; days: number };
+type YTPhase = "idle" | "connecting" | "fetching" | "pick-dest" | "pick-days" | "error";
 
 function YouTubeStep({
   onDone,
   onBack,
+  generating = false,
 }: {
-  onDone: (ids: string[]) => void;
+  onDone: (params: YTDoneParams) => void;
   onBack: () => void;
+  generating?: boolean;
 }) {
-  const [input, setInput] = useState("");
-  const [ids, setIds] = useState<string[]>([]);
-  const [error, setError] = useState("");
+  const [phase, setPhase] = useState<YTPhase>("idle");
+  const [destGroups, setDestGroups] = useState<DestGroup[]>([]);
+  const [ungrouped, setUngrouped] = useState<import("../../utils/youtube").VideoItem[]>([]);
+  const [selected, setSelected] = useState<DestGroup | null>(null);
+  const [days, setDays] = useState(5);
+  const [errorMsg, setErrorMsg] = useState("");
 
-  const addUrl = () => {
-    const trimmed = input.trim();
-    if (!trimmed) return;
-    const id = extractYouTubeId(trimmed);
-    if (!id) { setError("Couldn't find a YouTube video ID in that URL."); return; }
-    if (ids.includes(id)) { setError("That video is already added."); return; }
-    setIds((prev) => [...prev, id]);
-    setInput("");
-    setError("");
+  const handleConnect = async () => {
+    setPhase("connecting");
+    setErrorMsg("");
+    try {
+      const token = await requestYouTubeToken();
+      setPhase("fetching");
+      const [liked, favorites, playlists] = await Promise.all([
+        fetchLikedVideos(token),
+        fetchFavoriteVideos(token),
+        fetchUserPlaylists(token),
+      ]);
+      // Flatten + deduplicate across all sources
+      const seen = new Set<string>();
+      const all = [...liked, ...favorites, ...playlists.flatMap((p) => p.videos)]
+        .filter((v) => { if (seen.has(v.id)) return false; seen.add(v.id); return true; });
+      const { groups, ungrouped: ung } = groupByDest(all);
+      setDestGroups(groups);
+      setUngrouped(ung);
+      setPhase("pick-dest");
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : "Something went wrong.");
+      setPhase("error");
+    }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => { if (e.key === "Enter") { e.preventDefault(); addUrl(); } };
+  // ── Phase: pick days ──────────────────────────────────────────────────────
+  if (phase === "pick-days" && selected) {
+    return (
+      <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+        <div className="m3-appbar">
+          <M3IconBtn icon="arrow_back" onClick={() => setPhase("pick-dest")} />
+          <div className="title">{selected.name}</div>
+          <div style={{ padding: "0 16px" }}><StepBar step={1} /></div>
+        </div>
+        <div style={{ flex: 1, overflow: "auto", padding: "8px 24px 120px", display: "flex", justifyContent: "center" }}>
+          <div style={{ width: "100%", maxWidth: 720, display: "flex", flexDirection: "column", gap: 28 }}>
+            <div>
+              <h1 className="display-font" style={{ fontSize: 36, fontWeight: 500, margin: 0, letterSpacing: "-0.01em" }}>
+                How long?
+              </h1>
+              <p style={{ color: "var(--m3-on-surface-variant)", marginTop: 8, fontSize: 15 }}>
+                We'll draw from {selected.videos.length} saved video{selected.videos.length !== 1 ? "s" : ""} about {selected.name}.
+              </p>
+            </div>
+            <div>
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 10 }}>
+                <div style={{ fontSize: 14, fontWeight: 500, color: "var(--m3-on-surface-variant)" }}>Trip length</div>
+                <div className="display-font" style={{ fontSize: 28, fontWeight: 500 }}>
+                  {days} <span style={{ fontSize: 14, color: "var(--m3-on-surface-variant)", fontWeight: 400 }}>day{days !== 1 ? "s" : ""}</span>
+                </div>
+              </div>
+              <input type="range" min="1" max="14" value={days} onChange={(e) => setDays(+e.target.value)} />
+            </div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: "var(--m3-on-surface-variant)", marginBottom: 10 }}>
+                Videos we'll draw from
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                {selected.videos.slice(0, 10).map((v, i) => (
+                  <div key={v.id} style={{ display: "flex", gap: 8, alignItems: "baseline", padding: "4px 0", borderBottom: "1px solid var(--m3-outline-variant)" }}>
+                    <span style={{ fontSize: 12, color: "var(--m3-on-surface-variant)", minWidth: 20, flexShrink: 0 }}>{i + 1}.</span>
+                    <span style={{ fontSize: 13, flex: 1 }}>{v.title}</span>
+                    <span style={{ fontSize: 12, color: "var(--m3-on-surface-variant)", flexShrink: 0 }}>{v.channel}</span>
+                  </div>
+                ))}
+                {selected.videos.length > 10 && (
+                  <div style={{ fontSize: 12, color: "var(--m3-on-surface-variant)", padding: "6px 0" }}>
+                    +{selected.videos.length - 10} more
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style={{ position: "sticky", bottom: 0, padding: 16, background: "linear-gradient(to top, var(--m3-surface) 60%, transparent)", display: "flex", justifyContent: "flex-end", gap: 12, borderTop: "1px solid var(--m3-outline-variant)" }}>
+          <M3Button variant="text" onClick={() => setPhase("pick-dest")}>Back</M3Button>
+          <M3Button
+            icon="auto_awesome"
+            disabled={generating}
+            onClick={() => onDone({ ids: selected.videos.map((v) => v.id), titles: selected.videos.map((v) => v.title), location: selected.name, days })}
+          >
+            {generating ? "Generating…" : `Build ${days}-day itinerary`}
+          </M3Button>
+        </div>
+      </div>
+    );
+  }
 
+  // ── Phase: idle / connecting / fetching / pick-dest / error ───────────────
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
       <div className="m3-appbar">
         <M3IconBtn icon="arrow_back" onClick={onBack} />
-        <div className="title">Add YouTube videos</div>
+        <div className="title">Import from YouTube</div>
         <div style={{ padding: "0 16px" }}><StepBar step={1} /></div>
       </div>
-
-      <div style={{ flex: 1, overflow: "auto", padding: "8px 24px 120px", display: "flex", justifyContent: "center" }}>
+      <div style={{ flex: 1, overflow: "auto", padding: "8px 24px 32px", display: "flex", justifyContent: "center" }}>
         <div style={{ width: "100%", maxWidth: 720, display: "flex", flexDirection: "column", gap: 24 }}>
           <div>
-            <h1 className="display-font" style={{ fontSize: 36, fontWeight: 500, margin: 0, letterSpacing: "-0.01em" }}>Paste your videos</h1>
+            <h1 className="display-font" style={{ fontSize: 36, fontWeight: 500, margin: 0, letterSpacing: "-0.01em" }}>
+              {phase === "pick-dest" ? "Where do you want to go?" : "Connect YouTube"}
+            </h1>
             <p style={{ color: "var(--m3-on-surface-variant)", marginTop: 8, fontSize: 15 }}>
-              Add YouTube links that inspired your trip — we'll build the itinerary from them.
+              {phase === "pick-dest"
+                ? `Found ${destGroups.length} destination${destGroups.length !== 1 ? "s" : ""} in your library — pick one to plan.`
+                : "We'll scan your liked videos, favorites, and playlists to find travel destinations."}
             </p>
           </div>
 
-          <div style={{ display: "flex", gap: 10 }}>
-            <div style={{ flex: 1 }}>
-              <M3TextField
-                label="YouTube URL"
-                leadingIcon="smart_display"
-                value={input}
-                onChange={(e) => { setInput((e.target as HTMLInputElement).value); setError(""); }}
-                onKeyDown={handleKeyDown}
-              />
-            </div>
-            <M3Button icon="add" onClick={addUrl} style={{ alignSelf: "flex-start", marginTop: 4 }}>Add</M3Button>
-          </div>
-
-          {error && <p style={{ color: "var(--m3-error)", fontSize: 14, margin: 0 }}>{error}</p>}
-
-          {ids.length > 0 && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <div style={{ fontSize: 14, fontWeight: 500, color: "var(--m3-on-surface-variant)" }}>{ids.length} video{ids.length !== 1 ? "s" : ""} added</div>
-              {ids.map((id) => (
-                <div
-                  key={id}
-                  style={{
-                    display: "flex", alignItems: "center", gap: 12,
-                    padding: "10px 14px", borderRadius: 12,
-                    background: "var(--m3-surface-container-low)",
-                  }}
-                >
-                  <img
-                    src={`https://img.youtube.com/vi/${id}/default.jpg`}
-                    alt=""
-                    style={{ width: 64, height: 36, objectFit: "cover", borderRadius: 6, flexShrink: 0 }}
-                  />
-                  <span style={{ flex: 1, fontSize: 13, fontFamily: "monospace", color: "var(--m3-on-surface-variant)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    youtube.com/watch?v={id}
-                  </span>
-                  <M3IconBtn icon="close" size={18} onClick={() => setIds((prev) => prev.filter((x) => x !== id))} />
+          {(phase === "idle" || phase === "error") && (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, padding: "40px 24px", borderRadius: "var(--m3-corner-xl)", background: "var(--m3-surface-container-low)", textAlign: "center" }}>
+              <Sym name="smart_display" size={52} fill={1} style={{ color: "var(--m3-primary)", opacity: 0.85 }} />
+              <div>
+                <div style={{ fontWeight: 500, fontSize: 16, marginBottom: 6 }}>Sign in with Google</div>
+                <div style={{ fontSize: 13, color: "var(--m3-on-surface-variant)", maxWidth: 360 }}>
+                  A Google sign-in window will open. We only request read-only access.
                 </div>
-              ))}
+              </div>
+              {errorMsg && <p style={{ color: "var(--m3-error)", fontSize: 13, margin: 0 }}>{errorMsg}</p>}
+              <M3Button icon="login" onClick={handleConnect}>Connect YouTube account</M3Button>
             </div>
           )}
 
-          {ids.length === 0 && (
+          {(phase === "connecting" || phase === "fetching") && (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, padding: "40px 0", color: "var(--m3-on-surface-variant)", fontSize: 14 }}>
+              <div className="m3-blob" style={{ width: 64, height: 64, animation: "m3-blob1 4s ease-in-out infinite" }} />
+              {phase === "connecting" ? "Waiting for Google sign-in…" : "Scanning your videos for destinations…"}
+            </div>
+          )}
+
+          {phase === "pick-dest" && destGroups.length === 0 && (
             <div style={{ textAlign: "center", padding: "40px 0", color: "var(--m3-on-surface-variant)", fontSize: 14 }}>
-              <Sym name="smart_display" size={48} style={{ opacity: 0.3, display: "block", margin: "0 auto 12px" }} />
-              No videos added yet — paste a YouTube link above.
+              <Sym name="travel_explore" size={48} style={{ opacity: 0.3, display: "block", margin: "0 auto 12px" }} />
+              No recognizable destinations found in your video titles.
+              <div style={{ marginTop: 16 }}>
+                <M3Button variant="outlined" icon="refresh" onClick={handleConnect}>Try again</M3Button>
+              </div>
+            </div>
+          )}
+
+          {phase === "pick-dest" && destGroups.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {destGroups.map((group) => (
+                <button
+                  key={group.key}
+                  onClick={() => { setSelected(group); setPhase("pick-days"); }}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 16,
+                    padding: "16px 20px", borderRadius: "var(--m3-corner-xl)",
+                    background: "var(--m3-surface-container-low)",
+                    border: "none", cursor: "pointer", textAlign: "left", width: "100%",
+                    transition: "background .15s",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--m3-surface-container)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "var(--m3-surface-container-low)")}
+                >
+                  <Sym name="location_on" size={22} fill={1} style={{ color: "var(--m3-primary)", flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 500, fontSize: 16, color: "var(--m3-on-surface)" }}>{group.name}</div>
+                    <div style={{ fontSize: 12, color: "var(--m3-on-surface-variant)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {group.videos.slice(0, 2).map((v) => v.title).join(" · ")}
+                      {group.videos.length > 2 ? ` · +${group.videos.length - 2} more` : ""}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                    <span style={{ fontSize: 13, color: "var(--m3-on-surface-variant)" }}>{group.videos.length} video{group.videos.length !== 1 ? "s" : ""}</span>
+                    <Sym name="chevron_right" size={20} style={{ color: "var(--m3-on-surface-variant)" }} />
+                  </div>
+                </button>
+              ))}
+              {ungrouped.length > 0 && (
+                <div style={{ fontSize: 12, color: "var(--m3-on-surface-variant)", padding: "6px 4px" }}>
+                  {ungrouped.length} video{ungrouped.length !== 1 ? "s" : ""} didn't match a known destination.
+                </div>
+              )}
+              <M3Button variant="text" icon="refresh" onClick={handleConnect} style={{ alignSelf: "flex-start", marginTop: 4 }}>
+                Rescan
+              </M3Button>
             </div>
           )}
         </div>
-      </div>
-
-      <div
-        style={{
-          position: "sticky", bottom: 0, padding: 16,
-          background: "linear-gradient(to top, var(--m3-surface) 60%, transparent)",
-          display: "flex", justifyContent: "flex-end", gap: 12,
-          borderTop: "1px solid var(--m3-outline-variant)",
-        }}
-      >
-        <M3Button variant="text" onClick={onBack}>Back</M3Button>
-        <M3Button icon="auto_awesome" onClick={() => onDone(ids)} disabled={ids.length === 0}>
-          Build itinerary
-        </M3Button>
       </div>
     </div>
   );
@@ -835,40 +961,57 @@ function ReviewStep({
 // ── Main FormScreen ───────────────────────────────────────────────────────────
 export default function FormScreen({ mode = "reels" }: { mode?: "reels" | "youtube" }) {
   const navigate = useNavigate();
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState(mode === "youtube" ? 1 : 0);
   const [tripData, setTripData] = useState<TripData | null>(null);
   const [likedVideos, setLikedVideos] = useState<string[]>([]);
   const [generating, setGenerating] = useState(false);
 
-  const handleGenerate = async () => {
+  const handleGenerate = async (ytParams?: YTDoneParams) => {
     setGenerating(true);
+    const ids = ytParams?.ids ?? likedVideos;
     try {
-      const prompt = [
-        `Create a ${tripData!.days}-day travel plan`,
-        ` - Location: ${tripData!.location}`,
-        " - Start time: 08:00",
-        " - End time: 21:00",
-        ` - Activities: ${tripData!.tags.join(", ")}`,
-        ` - Season: ${tripData!.season}`,
-        tripData!.comments ? ` - Special notes: ${tripData!.comments}` : null,
-      ].filter(Boolean).join("\n");
+      let prompt: string;
+      if (ytParams) {
+        prompt = [
+          `Create a ${ytParams.days}-day travel itinerary for ${ytParams.location}.`,
+          `The traveler's saved YouTube videos about ${ytParams.location}:`,
+          ytParams.titles.slice(0, 20).map((t, i) => `${i + 1}. "${t}"`).join("\n"),
+          "\nBuild a day-by-day plan drawing from the specific places, activities, food, and experiences featured in or implied by these videos. Use real, named locations.",
+        ].join("\n");
+      } else {
+        prompt = [
+          `Create a ${tripData!.days}-day travel plan`,
+          ` - Location: ${tripData!.location}`,
+          " - Start time: 08:00",
+          " - End time: 21:00",
+          ` - Activities: ${tripData!.tags.join(", ")}`,
+          ` - Season: ${tripData!.season}`,
+          tripData!.comments ? ` - Special notes: ${tripData!.comments}` : null,
+        ].filter(Boolean).join("\n");
+      }
 
-      const videoUrls = likedVideos.map((id) => `https://www.youtube.com/watch?v=${id}`).join(",");
+      const videoUrls = ids.map((id) => `https://www.youtube.com/watch?v=${id}`).join(",");
       const params = new URLSearchParams({ prompt });
       if (videoUrls) params.set("video_urls", videoUrls);
 
       const res = await fetch(`/itinerary-api/generate_itinerary?${params}`, { method: "POST" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      const itinerary = { location: tripData!.location, days: tripData!.days, ...data.itinerary };
+      const itinerary = {
+        location: ytParams?.location ?? tripData?.location ?? "Your Trip",
+        days: ytParams?.days ?? tripData?.days ?? 7,
+        ...data.itinerary,
+      };
       localStorage.setItem("itinerary", JSON.stringify(itinerary));
-      localStorage.setItem("liked_videos", JSON.stringify(likedVideos));
+      localStorage.setItem("liked_videos", JSON.stringify(ids));
       navigate("/your-trip");
     } catch (e) {
       console.error("Itinerary backend unavailable, using mock:", e);
-      const itinerary = MOCK_ITINERARY(tripData!.location, tripData!.tags.map(String), tripData!.days);
+      const location = ytParams?.location ?? tripData?.location ?? "Your Trip";
+      const days = ytParams?.days ?? tripData?.days ?? 7;
+      const itinerary = MOCK_ITINERARY(location, tripData?.tags.map(String) ?? [], days);
       localStorage.setItem("itinerary", JSON.stringify(itinerary));
-      localStorage.setItem("liked_videos", JSON.stringify(likedVideos));
+      localStorage.setItem("liked_videos", JSON.stringify(ids));
       navigate("/your-trip");
     } finally {
       setGenerating(false);
@@ -890,10 +1033,11 @@ export default function FormScreen({ mode = "reels" }: { mode?: "reels" | "youtu
           onBack={() => setStep(0)}
         />
       )}
-      {step === 1 && tripData && mode === "youtube" && (
+      {step === 1 && mode === "youtube" && (
         <YouTubeStep
-          onDone={(ids) => { setLikedVideos(ids); setStep(2); }}
-          onBack={() => setStep(0)}
+          generating={generating}
+          onDone={(params) => handleGenerate(params)}
+          onBack={() => navigate("/")}
         />
       )}
       {step === 2 && tripData && (

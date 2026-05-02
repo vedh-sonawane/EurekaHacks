@@ -3,6 +3,7 @@ import GetStartedScreen from "./pages/GetStartedScreen/GetStartedScreen";
 import FormScreen from "./pages/FormScreen/FormScreen";
 import YourTripScreen from "./pages/YourTripScreen/YourTripScreen";
 import SavedTripsScreen from "./pages/SavedTripsScreen/SavedTripsScreen";
+import OAuthCallback from "./pages/OAuthCallback";
 import "./App.css";
 import "./m3.css";
 
@@ -42,7 +43,11 @@ function AppShell() {
 export default function App() {
   return (
     <Router>
-      <AppShell />
+      {/* /oauth-callback must be outside AppShell — it's a bare popup page */}
+      <Routes>
+        <Route path="/oauth-callback" element={<OAuthCallback />} />
+        <Route path="*" element={<AppShell />} />
+      </Routes>
     </Router>
   );
 }
