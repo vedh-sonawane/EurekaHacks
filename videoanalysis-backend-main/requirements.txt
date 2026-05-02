@@ -1,9 +1,0 @@
-Flask==3.0.3
-opencv-python-headless
-yt_dlp
-python-dotenv==1.0.1
-asyncio==3.4.3
-google-generativeai
-pillow
-selenium==4.23.0
-webdriver-manager==4.0.1
