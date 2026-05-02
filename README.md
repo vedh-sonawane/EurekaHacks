@@ -164,3 +164,5 @@ The `public/_redirects` file is included for Netlify-style SPA deployments. For 
 The two backends can be deployed as standard WSGI (Flask via `wsgi.py`) and Node.js processes respectively. Make sure the frontend's proxy targets are updated to the production URLs, or configure your reverse proxy (nginx, Caddy, etc.) to route `/api/*` and `/itinerary-api/*` to the correct services.
 
 ---
+
+Made with ❤️ by the Soar Team
