@@ -52,21 +52,7 @@ async function fetchShorts(location: string, page = 0, extra = ""): Promise<Shor
   return data.items ?? [];
 }
 
-const MOCK_DAY_ACTIVITIES = (location: string, tags: string[], day: number) => [
-  { startTime: "08:00", endTime: "09:30", activity: "Breakfast at a local café", location: `${location} City Center` },
-  { startTime: "10:00", endTime: "12:00", activity: tags.includes("History") ? `Day ${day} museum visit` : `Morning walk — area ${day}`, location: `${location} District ${day}` },
-  { startTime: "12:30", endTime: "13:30", activity: "Lunch", location: `${location} Market Square ${day}` },
-  { startTime: "14:00", endTime: "16:00", activity: tags.includes("Hiking") ? `Trail ${day}` : tags.includes("Beach") ? `Beach ${day}` : `Gardens ${day}`, location: `${location} Zone ${day}` },
-  { startTime: "19:00", endTime: "21:00", activity: "Dinner", location: `${location} Restaurant Row ${day}` },
-];
 
-const MOCK_ITINERARY = (location: string, tags: string[], days: number) => ({
-  location,
-  days_plan: Array.from({ length: days }, (_, i) => ({
-    day: i + 1,
-    activities: MOCK_DAY_ACTIVITIES(location, tags, i + 1),
-  })),
-});
 
 const TAG_KEYWORDS: Partial<Record<ActivityTag, string[]>> = {
   [ActivityTag.Sightseeing]: ["sightseeing", "landmark", "monument", "attractions", "tourist"],
@@ -919,9 +905,12 @@ function ReviewStep({
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {likedVideos.map((id) => (
-                  <div key={id} style={{ padding: "6px 12px", borderRadius: 8, background: "var(--m3-surface-container-low)", fontSize: 13, fontFamily: "monospace", color: "var(--m3-on-surface-variant)" }}>
-                    {id}
-                  </div>
+                  <img
+                    key={id}
+                    src={`https://img.youtube.com/vi/${id}/mqdefault.jpg`}
+                    alt={id}
+                    style={{ width: 80, height: 120, borderRadius: 8, objectFit: "cover", background: "var(--m3-surface-container-low)" }}
+                  />
                 ))}
               </div>
             </div>
@@ -947,7 +936,7 @@ function ReviewStep({
         <M3Button variant="outlined" icon="arrow_back" onClick={onBack}>Back</M3Button>
         <M3Button
           icon="auto_awesome"
-          onClick={onGenerate}
+          onClick={() => onGenerate()}
           disabled={generating}
           style={{ opacity: generating ? 0.6 : 1 }}
         >
@@ -1006,13 +995,8 @@ export default function FormScreen({ mode = "reels" }: { mode?: "reels" | "youtu
       localStorage.setItem("liked_videos", JSON.stringify(ids));
       navigate("/your-trip");
     } catch (e) {
-      console.error("Itinerary backend unavailable, using mock:", e);
-      const location = ytParams?.location ?? tripData?.location ?? "Your Trip";
-      const days = ytParams?.days ?? tripData?.days ?? 7;
-      const itinerary = MOCK_ITINERARY(location, tripData?.tags.map(String) ?? [], days);
-      localStorage.setItem("itinerary", JSON.stringify(itinerary));
-      localStorage.setItem("liked_videos", JSON.stringify(ids));
-      navigate("/your-trip");
+      console.error("Itinerary generation failed:", e);
+      alert(`Couldn't generate itinerary: ${e instanceof Error ? e.message : "Backend error"}. Make sure the itinerary server is running and the API key is valid.`);
     } finally {
       setGenerating(false);
     }
