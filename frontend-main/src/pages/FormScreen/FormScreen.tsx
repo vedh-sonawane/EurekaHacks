@@ -16,21 +16,15 @@ const SEASON_ICONS: Record<Season, string> = {
 
 const TAG_ICONS: Partial<Record<ActivityTag, string>> = {
   [ActivityTag.Sightseeing]: "tour",
-  [ActivityTag.Beach]: "beach_access",
   [ActivityTag.Hiking]: "hiking",
   [ActivityTag.Dining]: "restaurant",
   [ActivityTag.Adventure]: "paragliding",
   [ActivityTag.Relaxation]: "self_improvement",
   [ActivityTag.Nightlife]: "nightlife",
-  [ActivityTag.Wildlife]: "pets",
   [ActivityTag.CulturalExperience]: "temple_buddhist",
-  [ActivityTag.Festival]: "celebration",
-  [ActivityTag.RoadTrip]: "directions_car",
   [ActivityTag.Camping]: "forest",
-  [ActivityTag.Spa]: "spa",
   [ActivityTag.Photography]: "photo_camera",
   [ActivityTag.Entertainment]: "theater_comedy",
-  [ActivityTag.History]: "account_balance",
   [ActivityTag.FamilyFun]: "family_restroom",
   [ActivityTag.ThemePark]: "attractions",
 };
@@ -52,35 +46,33 @@ async function fetchShorts(location: string, page = 0, extra = ""): Promise<Shor
   return data.items ?? [];
 }
 
-const MOCK_ITINERARY = (location: string, tags: string[]) => ({
+const MOCK_DAY_ACTIVITIES = (location: string, tags: string[], day: number) => [
+  { startTime: "08:00", endTime: "09:30", activity: "Breakfast at a local café", location: `${location} City Center` },
+  { startTime: "10:00", endTime: "12:00", activity: tags.includes("History") ? `Day ${day} museum visit` : `Morning walk — area ${day}`, location: `${location} District ${day}` },
+  { startTime: "12:30", endTime: "13:30", activity: "Lunch", location: `${location} Market Square ${day}` },
+  { startTime: "14:00", endTime: "16:00", activity: tags.includes("Hiking") ? `Trail ${day}` : tags.includes("Beach") ? `Beach ${day}` : `Gardens ${day}`, location: `${location} Zone ${day}` },
+  { startTime: "19:00", endTime: "21:00", activity: "Dinner", location: `${location} Restaurant Row ${day}` },
+];
+
+const MOCK_ITINERARY = (location: string, tags: string[], days: number) => ({
   location,
-  activities: [
-    { startTime: "8:00",  endTime: "9:30",  activity: "Breakfast at a local café",             location: `${location} City Center` },
-    { startTime: "10:00", endTime: "12:00", activity: tags.includes("Museum") || tags.includes("History") ? "Visit the main historical museum" : "Morning exploration walk", location: `${location} Old Town` },
-    { startTime: "12:30", endTime: "13:30", activity: tags.includes("Dining") ? "Lunch at a renowned local restaurant" : "Lunch at a street food market", location: `${location} Market Square` },
-    { startTime: "14:00", endTime: "16:00", activity: tags.includes("Hiking") ? "Scenic hike with city views" : tags.includes("Beach") ? "Afternoon at the beach" : "Explore the botanical gardens", location: `${location} East Side` },
-    { startTime: "16:30", endTime: "18:00", activity: tags.includes("Shopping") ? "Shopping at local boutiques" : "Wander through the local markets", location: `${location} Shopping District` },
-    { startTime: "19:00", endTime: "21:00", activity: tags.includes("Nightlife") ? "Bar hopping in the nightlife district" : "Dinner at a rooftop restaurant", location: `${location} Skyline Avenue` },
-  ],
+  days_plan: Array.from({ length: days }, (_, i) => ({
+    day: i + 1,
+    activities: MOCK_DAY_ACTIVITIES(location, tags, i + 1),
+  })),
 });
 
 const TAG_KEYWORDS: Partial<Record<ActivityTag, string[]>> = {
   [ActivityTag.Sightseeing]: ["sightseeing", "landmark", "monument", "attractions", "tourist"],
-  [ActivityTag.Beach]: ["beach", "ocean", "coast", "surf", "sand", "sea"],
   [ActivityTag.Hiking]: ["hike", "hiking", "trail", "trek", "mountain"],
   [ActivityTag.Dining]: ["food", "restaurant", "eat", "cuisine", "dining", "dish"],
   [ActivityTag.Adventure]: ["adventure", "extreme", "thrill", "adrenaline", "outdoor"],
   [ActivityTag.Relaxation]: ["relax", "peaceful", "calm", "tranquil", "retreat"],
   [ActivityTag.Nightlife]: ["nightlife", "bar", "club", "night", "party"],
-  [ActivityTag.Wildlife]: ["wildlife", "animals", "safari", "nature", "wild"],
   [ActivityTag.CulturalExperience]: ["culture", "cultural", "tradition", "local", "temple", "heritage"],
-  [ActivityTag.Festival]: ["festival", "celebration", "event", "carnival", "fair"],
-  [ActivityTag.RoadTrip]: ["road trip", "roadtrip", "drive", "driving", "scenic drive"],
   [ActivityTag.Camping]: ["camp", "camping", "outdoors", "wilderness", "tent"],
-  [ActivityTag.Spa]: ["spa", "massage", "wellness", "hot spring", "thermal"],
   [ActivityTag.Photography]: ["photography", "photo", "instagram", "scenic", "viewpoint"],
   [ActivityTag.Entertainment]: ["entertainment", "show", "concert", "performance", "theater"],
-  [ActivityTag.History]: ["history", "historical", "ancient", "heritage", "ruins"],
   [ActivityTag.FamilyFun]: ["family", "kids", "family-friendly", "children", "playground"],
   [ActivityTag.ThemePark]: ["theme park", "amusement", "rides", "disney", "universal"],
 };
@@ -113,14 +105,14 @@ function inferTags(title: string): ActivityTag[] {
 }
 
 const TAG_SEARCH_TERMS: Partial<Record<ActivityTag, string>> = {
-  [ActivityTag.Sightseeing]: "sightseeing", [ActivityTag.Beach]: "beach",
+  [ActivityTag.Sightseeing]: "sightseeing",
   [ActivityTag.Hiking]: "hiking", [ActivityTag.Dining]: "food tour",
   [ActivityTag.Adventure]: "adventure", [ActivityTag.Relaxation]: "relaxation",
-  [ActivityTag.Nightlife]: "nightlife", [ActivityTag.Wildlife]: "wildlife",
-  [ActivityTag.CulturalExperience]: "cultural experience", [ActivityTag.Festival]: "festival",
-  [ActivityTag.RoadTrip]: "road trip", [ActivityTag.Camping]: "camping",
-  [ActivityTag.Spa]: "spa wellness", [ActivityTag.Photography]: "photography spots",
-  [ActivityTag.Entertainment]: "entertainment", [ActivityTag.History]: "historical sites",
+  [ActivityTag.Nightlife]: "nightlife",
+  [ActivityTag.CulturalExperience]: "cultural experience",
+  [ActivityTag.Camping]: "camping",
+  [ActivityTag.Photography]: "photography spots",
+  [ActivityTag.Entertainment]: "entertainment",
   [ActivityTag.FamilyFun]: "family friendly", [ActivityTag.ThemePark]: "theme park",
 };
 
@@ -158,16 +150,42 @@ function isLocationMatch(title: string, locationTerms: string[]): boolean {
 // ── Trip Details ──────────────────────────────────────────────────────────────
 type TripData = { location: string; days: number; season: Season; tags: ActivityTag[]; comments: string };
 
+type LocationSuggestion = { name: string; country: string; admin1?: string };
+
 function TripDetailsStep({ onNext, onBack }: { onNext: (data: TripData) => void; onBack: () => void }) {
   const [location, setLocation] = useState("");
   const [days, setDays] = useState(5);
   const [season, setSeason] = useState<Season>("Spring");
   const [tags, setTags] = useState<ActivityTag[]>([]);
-  const [comments, setComments] = useState("");
   const [error, setError] = useState("");
+  const [suggestions, setSuggestions] = useState<LocationSuggestion[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const toggleTag = (tag: ActivityTag) =>
     setTags((prev) => prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]);
+
+  const handleLocationChange = (value: string) => {
+    setLocation(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (value.length < 2) { setSuggestions([]); setShowSuggestions(false); return; }
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(value)}&count=6&language=en&format=json`);
+        const data = await res.json();
+        const results: LocationSuggestion[] = (data.results ?? []).map((r: { name: string; country: string; admin1?: string }) => ({ name: r.name, country: r.country, admin1: r.admin1 }));
+        setSuggestions(results);
+        setShowSuggestions(results.length > 0);
+      } catch { /* ignore */ }
+    }, 300);
+  };
+
+  const selectSuggestion = (s: LocationSuggestion) => {
+    const label = s.admin1 ? `${s.name}, ${s.admin1}, ${s.country}` : `${s.name}, ${s.country}`;
+    setLocation(label);
+    setSuggestions([]);
+    setShowSuggestions(false);
+  };
 
   const handleNext = () => {
     if (!location.trim() || tags.length === 0) {
@@ -175,7 +193,7 @@ function TripDetailsStep({ onNext, onBack }: { onNext: (data: TripData) => void;
       return;
     }
     setError("");
-    onNext({ location, days, season, tags, comments });
+    onNext({ location, days, season, tags, comments: "" });
   };
 
   return (
@@ -197,12 +215,44 @@ function TripDetailsStep({ onNext, onBack }: { onNext: (data: TripData) => void;
             </p>
           </div>
 
-          <M3TextField
-            label="Destination"
-            leadingIcon="location_on"
-            value={location}
-            onChange={(e) => setLocation((e.target as HTMLInputElement).value)}
-          />
+          {/* Destination with autocomplete */}
+          <div style={{ position: "relative" }}>
+            <M3TextField
+              label="Destination"
+              leadingIcon="location_on"
+              value={location}
+              onChange={(e) => handleLocationChange((e.target as HTMLInputElement).value)}
+              onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+              onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true); }}
+            />
+            {showSuggestions && (
+              <div style={{
+                position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 100,
+                background: "var(--m3-surface-container)", borderRadius: 12,
+                boxShadow: "0 4px 16px var(--m3-shadow)", overflow: "hidden",
+              }}>
+                {suggestions.map((s, i) => {
+                  const label = s.admin1 ? `${s.name}, ${s.admin1}, ${s.country}` : `${s.name}, ${s.country}`;
+                  return (
+                    <div
+                      key={i}
+                      onMouseDown={() => selectSuggestion(s)}
+                      style={{
+                        padding: "12px 16px", cursor: "pointer", display: "flex", alignItems: "center", gap: 12,
+                        borderBottom: i < suggestions.length - 1 ? "1px solid var(--m3-outline-variant)" : "none",
+                        fontSize: 14,
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "var(--m3-surface-container-high)")}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                    >
+                      <Sym name="location_on" size={18} style={{ color: "var(--m3-on-surface-variant)", flexShrink: 0 }} />
+                      {label}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
           {/* Days */}
           <div>
@@ -245,13 +295,6 @@ function TripDetailsStep({ onNext, onBack }: { onNext: (data: TripData) => void;
               ))}
             </div>
           </div>
-
-          <M3TextField
-            label="Anything special? (allergies, accessibility, must-sees…)"
-            multiline
-            value={comments}
-            onChange={(e) => setComments(e.target.value)}
-          />
 
           {error && (
             <p style={{ color: "var(--m3-error)", fontSize: 14, margin: 0 }}>{error}</p>
@@ -680,7 +723,7 @@ export default function FormScreen() {
       navigate("/your-trip");
     } catch (e) {
       console.error("Itinerary backend unavailable, using mock:", e);
-      const itinerary = MOCK_ITINERARY(tripData!.location, tripData!.tags.map(String));
+      const itinerary = MOCK_ITINERARY(tripData!.location, tripData!.tags.map(String), tripData!.days);
       localStorage.setItem("itinerary", JSON.stringify(itinerary));
       localStorage.setItem("liked_videos", JSON.stringify(likedVideos));
       navigate("/your-trip");

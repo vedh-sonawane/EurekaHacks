@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { Sym, M3IconBtn, M3Button, M3FAB } from "../../components/M3";
+import { Sym, M3IconBtn, M3Button } from "../../components/M3";
 
 interface Activity {
   startTime: string;
@@ -9,10 +9,15 @@ interface Activity {
   location: string;
 }
 
+interface DayPlan {
+  day: number;
+  activities: Activity[];
+}
+
 interface Itinerary {
   location: string;
   days?: number;
-  activities: Activity[];
+  days_plan: DayPlan[];
 }
 
 const ACTIVITY_ICONS: Record<string, string> = {
@@ -71,8 +76,10 @@ export default function YourTripScreen() {
     );
   }
 
-  const first = itinerary.activities[0];
-  const last = itinerary.activities[itinerary.activities.length - 1];
+  const totalActivities = itinerary.days_plan.reduce((sum, d) => sum + d.activities.length, 0);
+  const firstAct = itinerary.days_plan[0]?.activities[0];
+  const lastDay = itinerary.days_plan[itinerary.days_plan.length - 1];
+  const lastAct = lastDay?.activities[lastDay.activities.length - 1];
 
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
@@ -117,11 +124,13 @@ export default function YourTripScreen() {
               {itinerary.location}
             </h1>
             <div style={{ display: "flex", gap: 16, marginTop: 12, fontSize: 14, flexWrap: "wrap" }}>
+              {firstAct && lastAct && (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                  <Sym name="schedule" size={16} /> {firstAct.startTime} – {lastAct.endTime} daily
+                </span>
+              )}
               <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                <Sym name="schedule" size={16} /> {first.startTime} – {last.endTime}
-              </span>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                <Sym name="check_circle" size={16} fill={1} /> {itinerary.activities.length} activities
+                <Sym name="check_circle" size={16} fill={1} /> {totalActivities} activities
               </span>
               {likedCount > 0 && (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
@@ -132,75 +141,87 @@ export default function YourTripScreen() {
           </div>
         </div>
 
-        {/* Activity timeline */}
+        {/* Day-by-day timeline */}
         <div style={{ padding: "0 24px", maxWidth: 800, margin: "0 auto" }}>
-          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 16 }}>
-            <h2 className="display-font" style={{ fontSize: 22, fontWeight: 500, margin: 0 }}>Day plan</h2>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8 }}>
+            <h2 className="display-font" style={{ fontSize: 22, fontWeight: 500, margin: 0 }}>Itinerary</h2>
             <M3Button variant="text" icon="edit" onClick={() => navigate("/create-trip")}>Rebuild</M3Button>
           </div>
 
-          {/* Timeline */}
-          <div style={{ position: "relative", paddingLeft: 32 }}>
-            <div style={{ position: "absolute", left: 15, top: 12, bottom: 12, width: 2, background: "var(--m3-outline-variant)" }} />
-
-            {itinerary.activities.map((act, i) => (
-              <div key={i} style={{ position: "relative", marginBottom: 14 }}>
-                {/* Timeline dot */}
+          {itinerary.days_plan.map((dayPlan) => (
+            <div key={dayPlan.day}>
+              {/* Day header */}
+              <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "28px 0 16px" }}>
                 <div
                   style={{
-                    position: "absolute", left: -28, top: 14,
-                    width: 18, height: 18, borderRadius: 9,
-                    background: "var(--m3-primary-container)",
-                    border: "3px solid var(--m3-surface)",
+                    width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+                    background: "var(--m3-primary)", color: "var(--m3-on-primary)",
                     display: "inline-flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 13, fontWeight: 700,
                   }}
                 >
-                  <span style={{ width: 6, height: 6, borderRadius: 3, background: "var(--m3-primary)" }} />
+                  {dayPlan.day}
                 </div>
+                <h3 className="display-font" style={{ fontSize: 18, fontWeight: 500, margin: 0 }}>
+                  Day {dayPlan.day}
+                </h3>
+              </div>
 
-                <div className="m3-card outlined" style={{ padding: 0, overflow: "hidden" }}>
-                  <div style={{ padding: "14px 16px" }}>
-                    {/* Time row */}
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--m3-on-surface-variant)", marginBottom: 8 }}>
-                      <Sym name="schedule" size={14} />
-                      {act.startTime} – {act.endTime}
+              {/* Activities */}
+              <div style={{ position: "relative", paddingLeft: 32 }}>
+                <div style={{ position: "absolute", left: 15, top: 0, bottom: 0, width: 2, background: "var(--m3-outline-variant)" }} />
+
+                {dayPlan.activities.map((act, i) => (
+                  <div key={i} style={{ position: "relative", marginBottom: 14 }}>
+                    <div
+                      style={{
+                        position: "absolute", left: -28, top: 14,
+                        width: 18, height: 18, borderRadius: 9,
+                        background: "var(--m3-primary-container)",
+                        border: "3px solid var(--m3-surface)",
+                        display: "inline-flex", alignItems: "center", justifyContent: "center",
+                      }}
+                    >
+                      <span style={{ width: 6, height: 6, borderRadius: 3, background: "var(--m3-primary)" }} />
                     </div>
 
-                    {/* Activity row */}
-                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                      <div
-                        style={{
-                          width: 40, height: 40, borderRadius: 12, flexShrink: 0,
-                          background: "var(--m3-tertiary-container)",
-                          color: "var(--m3-on-tertiary-container)",
-                          display: "inline-flex", alignItems: "center", justifyContent: "center",
-                        }}
-                      >
-                        <Sym name={inferIcon(act.activity)} size={22} fill={1} />
-                      </div>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 16, fontWeight: 500 }}>{act.activity}</div>
-                        <div
-                          style={{
-                            fontSize: 13, color: "var(--m3-on-surface-variant)",
-                            display: "inline-flex", alignItems: "center", gap: 4, marginTop: 2,
-                          }}
-                        >
-                          <Sym name="location_on" size={14} /> {act.location}
+                    <div className="m3-card outlined" style={{ padding: 0, overflow: "hidden" }}>
+                      <div style={{ padding: "14px 16px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--m3-on-surface-variant)", marginBottom: 8 }}>
+                          <Sym name="schedule" size={14} />
+                          {act.startTime} – {act.endTime}
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                          <div
+                            style={{
+                              width: 40, height: 40, borderRadius: 12, flexShrink: 0,
+                              background: "var(--m3-tertiary-container)",
+                              color: "var(--m3-on-tertiary-container)",
+                              display: "inline-flex", alignItems: "center", justifyContent: "center",
+                            }}
+                          >
+                            <Sym name={inferIcon(act.activity)} size={22} fill={1} />
+                          </div>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: 16, fontWeight: 500 }}>{act.activity}</div>
+                            <div
+                              style={{
+                                fontSize: 13, color: "var(--m3-on-surface-variant)",
+                                display: "inline-flex", alignItems: "center", gap: 4, marginTop: 2,
+                              }}
+                            >
+                              <Sym name="location_on" size={14} /> {act.location}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
-                </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
-      </div>
-
-      {/* FAB */}
-      <div style={{ position: "absolute", right: 24, bottom: 24 }}>
-        <M3FAB icon="add" label="Add activity" />
       </div>
 
       {/* Snackbar */}

@@ -69,18 +69,37 @@ const SHORTS_SP = 'EgIYAQ%3D%3D';
 // Minimum views to exclude low-quality / spam videos
 const MIN_VIEWS = 100_000;
 
+// Extract "City Country" from "City, Region, Country" autocomplete format for cleaner searches
+function cleanLocationQuery(location) {
+  const parts = location.split(',').map(s => s.trim()).filter(Boolean);
+  if (parts.length >= 2) return `${parts[0]} ${parts[parts.length - 1]}`;
+  return parts[0] || location;
+}
+
+// Build terms used for post-fetch relevance filtering (all parts of the location)
+function locationFilterTerms(location) {
+  return location.toLowerCase().split(/[\s,]+/).filter(t => t.length > 2);
+}
+
+// Reject a video if none of the location terms appear in its title
+function isTitleRelevant(title, terms) {
+  const lower = title.toLowerCase();
+  return terms.some(t => lower.includes(t));
+}
+
 const feedCache   = new Map(); // cacheKey → { items, ts }
 const FEED_TTL_MS = 20 * 60 * 1000; // 20 min
 
 async function getFeed(page, location, extra = '') {
-  const kwIndex  = page % SEARCH_KEYWORDS.length;
-  const kwRound  = Math.floor(page / SEARCH_KEYWORDS.length);
-  const kw       = SEARCH_KEYWORDS[kwIndex];
-  const query    = [location, extra, kw].filter(Boolean).join(' ');
-  const start    = kwRound * 8 + 1;    // 1, 9, 17, 25 … per keyword cycle
-  const end      = start + 19;
-  const cacheKey = `${query}:${start}`;
-  const hit      = feedCache.get(cacheKey);
+  const kwIndex   = page % SEARCH_KEYWORDS.length;
+  const kwRound   = Math.floor(page / SEARCH_KEYWORDS.length);
+  const kw        = SEARCH_KEYWORDS[kwIndex];
+  const locQuery  = cleanLocationQuery(location);       // "Paris France" not "Paris, Île-de-France, France"
+  const query     = [locQuery, extra, kw].filter(Boolean).join(' ');
+  const start     = kwRound * 8 + 1;
+  const end       = start + 19;
+  const cacheKey  = `${query}:${start}`;
+  const hit       = feedCache.get(cacheKey);
   if (hit && Date.now() - hit.ts < FEED_TTL_MS) return hit.items;
 
   console.log(`  fetching feed page ${page}: "${query}" items ${start}-${end}`);
@@ -96,12 +115,11 @@ async function getFeed(page, location, extra = '') {
     '--playlist-items', `${start}-${end}`,
   ], 45_000);
 
-  // Take top 12 by views, then shuffle so each session sees a different order
+  // Keep videos that clear the 100k view floor.
+  // Shuffle randomly — don't rank by views so 100k–500k videos get equal exposure.
   const pool = raw
     .filter(v => v.id && v.duration != null && v.duration > 1 && v.duration <= 90)
-    .filter(v => v.view_count == null || v.view_count >= MIN_VIEWS)
-    .sort((a, b) => (b.view_count ?? 0) - (a.view_count ?? 0))
-    .slice(0, 12);
+    .filter(v => v.view_count == null || v.view_count >= MIN_VIEWS);
 
   for (let i = pool.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));

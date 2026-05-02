@@ -102,6 +102,8 @@ interface M3TextFieldProps {
   leadingIcon?: string;
   value?: string;
   onChange?: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
+  onBlur?: (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
+  onFocus?: (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
   multiline?: boolean;
   placeholder?: string;
   style?: CSSProperties;
