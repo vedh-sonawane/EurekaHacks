@@ -1,6 +1,3 @@
-import cv2
-import PIL.Image
-import numpy as np
 from dotenv import load_dotenv
 import os
 import json
