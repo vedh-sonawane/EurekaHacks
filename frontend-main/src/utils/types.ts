@@ -1,8 +1,3 @@
-export interface TikTokVideoObject {
-  url: string;
-  id: string;
-}
-
 export enum ActivityTag {
   Sightseeing = "Sightseeing",
   Beach = "Beach",
@@ -28,34 +23,4 @@ export enum ActivityTag {
   ThemePark = "Theme Park",
   WaterSports = "Water Sports",
   WinterSports = "Winter Sports"
-}
-
-export interface TripInfo {
-  location: string;
-  startTime: string;
-  endTime: string;
-  activityTags: ActivityTag[];
-  comments: string;
-}
-
-interface Inspiration {
-  explanation: string;
-  video_url: string;
-}
-export interface Activity {
-  id?: number
-  startTime: string;
-  endTime: string;
-  activity: string;
-  location: string;
-  inspiredBy: Inspiration | null;
-}
-
-export interface Itinerary{
-  activities: Activity[]
-}
-
-export interface FormRequirements {
-  condition: (...args: unknown[]) => boolean;
-  errorMsg: string;
 }

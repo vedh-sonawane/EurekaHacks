@@ -141,6 +141,8 @@ function SwipeStep({ location, onDone }: { location: string; onDone: (liked: str
   const [liked,   setLiked]   = useState<string[]>([]);
   const [animDir, setAnimDir] = useState<"left" | "right" | null>(null);
   const animTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Stable refs for all video elements — never re-created, just src-swapped (mirrors shorts/app.js)
+  const videoRefs = useRef<(HTMLVideoElement | null)[]>([]);
 
   useEffect(() => {
     setLoading(true);
@@ -149,12 +151,28 @@ function SwipeStep({ location, onDone }: { location: string; onDone: (liked: str
       .catch(() => { setError("Couldn't load shorts — is the shorts backend running? (node shorts-backend/server.js)"); setLoading(false); });
   }, [location]);
 
+  // Mirror shorts/app.js prefetchAhead: set src for current + next 2, play current, pause previous
+  useEffect(() => {
+    if (videos.length === 0) return;
+    for (let ahead = 1; ahead <= 2; ahead++) {
+      const el = videoRefs.current[index + ahead];
+      const v  = videos[index + ahead];
+      if (el && v && !el.src) el.src = `/api/proxy?v=${v.videoId}`;
+    }
+    const currentEl = videoRefs.current[index];
+    if (currentEl) {
+      if (!currentEl.src) currentEl.src = `/api/proxy?v=${videos[index].videoId}`;
+      currentEl.play().catch(() => {});
+    }
+    if (index > 0) videoRefs.current[index - 1]?.pause();
+  }, [index, videos]);
+
   const swipe = (dir: "left" | "right") => {
     if (animTimeout.current || loading || videos.length === 0) return;
-    const current = videos[index].videoId;
+    const currentId = videos[index].videoId;
     setAnimDir(dir);
     animTimeout.current = setTimeout(() => {
-      const newLiked = dir === "right" ? [...liked, current] : liked;
+      const newLiked = dir === "right" ? [...liked, currentId] : liked;
       if (dir === "right") setLiked(newLiked);
       setAnimDir(null);
       animTimeout.current = null;
@@ -194,18 +212,26 @@ function SwipeStep({ location, onDone }: { location: string; onDone: (liked: str
               <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem", color: "#888", fontSize: "0.85rem", textAlign: "center" }}>
                 {error}
               </div>
-            ) : current ? (
-              <video
-                key={current.videoId}
-                src={`/api/proxy?v=${current.videoId}`}
-                poster={current.thumbnail}
-                autoPlay
-                loop
-                muted
-                playsInline
-                style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", objectFit: "cover" }}
-              />
-            ) : null}
+            ) : (
+              // All video elements are kept in the DOM with stable keys (position index).
+              // Only the current one is visible; src is set lazily via refs — no re-mounts on swipe.
+              videos.map((v, i) => (
+                <video
+                  key={i}
+                  ref={el => { videoRefs.current[i] = el; }}
+                  loop
+                  muted
+                  playsInline
+                  preload="auto"
+                  style={{
+                    position: "absolute", top: 0, left: 0,
+                    width: "100%", height: "100%",
+                    objectFit: "cover",
+                    display: i === index ? "block" : "none",
+                  }}
+                />
+              ))
+            )}
           </div>
           {current && (
             <div style={{ padding: "0.6rem 0.2rem" }}>

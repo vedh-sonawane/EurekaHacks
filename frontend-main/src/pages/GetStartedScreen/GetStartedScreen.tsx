@@ -30,7 +30,7 @@ export default function GetStartedScreen() {
           Swipe travel videos.<br />Get your perfect itinerary.
         </h1>
         <p style={{ color: "#bbb", fontSize: "1.15rem", maxWidth: "520px", lineHeight: 1.7, margin: "0 0 2.5rem" }}>
-          Like the TikToks that match your vibe and we'll build a personalised day-by-day plan — in seconds.
+          Like the YouTube Shorts that match your vibe and we'll build a personalised day-by-day plan — in seconds.
         </p>
         <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
           <button
@@ -63,7 +63,7 @@ export default function GetStartedScreen() {
 
         {/* Social proof strip */}
         <div style={{ marginTop: "3rem", display: "flex", gap: "2.5rem", flexWrap: "wrap" }}>
-          {[["🌍", "50+ destinations"], ["🎬", "TikTok-powered"], ["⚡", "Instant results"]].map(([icon, text]) => (
+          {[["🌍", "50+ destinations"], ["🎬", "YouTube Shorts"], ["⚡", "Instant results"]].map(([icon, text]) => (
             <div key={text} style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "#aaa", fontSize: "0.9rem" }}>
               <span style={{ fontSize: "1.1rem" }}>{icon}</span> {text}
             </div>
