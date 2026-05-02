@@ -189,14 +189,26 @@ function getStreamUrl(videoId) {
 
 function jsonRes(res, body, status = 200) {
   res.writeHead(status, {
-    'Content-Type':                'application/json; charset=utf-8',
-    'Access-Control-Allow-Origin': '*',
-    'Cache-Control':               'no-store',
+    ...CORS_HEADERS,
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store',
   });
   res.end(JSON.stringify(body));
 }
 
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin':  '*',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
 const server = http.createServer(async (req, res) => {
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, CORS_HEADERS);
+    res.end();
+    return;
+  }
   if (req.method !== 'GET') { res.writeHead(405); res.end(); return; }
 
   const url = new URL(req.url, `http://localhost:${PORT}`);
@@ -224,7 +236,7 @@ const server = http.createServer(async (req, res) => {
     if (!/^[A-Za-z0-9_-]{5,15}$/.test(v)) { res.writeHead(400); res.end('bad id'); return; }
     try {
       const cdnUrl = await getStreamUrl(v);
-      res.writeHead(302, { 'Location': cdnUrl, 'Cache-Control': 'no-store' });
+      res.writeHead(302, { ...CORS_HEADERS, 'Location': cdnUrl, 'Cache-Control': 'no-store' });
       res.end();
     } catch (e) {
       console.error('[proxy]', v, e.message);
