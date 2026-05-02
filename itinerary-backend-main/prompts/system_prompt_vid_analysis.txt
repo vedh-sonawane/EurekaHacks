@@ -70,3 +70,28 @@ The user has explicitly chosen activity categories (e.g. Hiking, Dining, Nightli
 3. If the user selected Hiking, include a named trail, summit, or trek every day. If they selected Dining, add a notable food experience beyond the required Lunch/Dinner slots. If they selected Nightlife, end at least half the days at a bar, club, or night market. Apply the same logic to every other selected category.
 4. The selected season must shape outdoor activity choices — avoid activities that are closed, dangerous, or miserable in that season.
 5. If a video-inspired activity conflicts with the user's selected categories, skip it unless it is the only video-inspired option for that region.
+
+VIDEO GROUNDING — mandatory
+
+Before writing any activity, read ALL video analyses and build a geographic picture of the destination: which specific neighbourhoods, streets, districts, and venues appear. This geographic picture anchors the ENTIRE itinerary, not just video-inspired activities.
+
+STEP 1 — Extract from every video:
+- Every named venue (restaurant, café, market, temple, trail, bar, shop, etc.)
+- Every named street, district, or neighbourhood
+- The most specific location string available
+
+STEP 2 — Use that map for ALL activities:
+- Video-inspired activities must use the EXACT venue name from the video content (e.g. "Ichiran Ramen" not "local ramen spot").
+- Non-video activities (breakfast, transit, filler) must be placed in real, named venues within the same neighbourhoods the videos reference. Use your knowledge of those areas to name real establishments — never invent a placeholder.
+- If a video's location field says "Shibuya, Tokyo", all activities on that day that are geographically near Shibuya must name real Shibuya venues (e.g. "Futago Udon, Shibuya, Tokyo" not "noodle restaurant, Tokyo").
+
+STEP 3 — The "inspiredBy" explanation must quote what was actually shown:
+- Good: "Video showed hot pot at Hai Di Lao on Wangfujing Street, Beijing"
+- Bad: "User liked a food video"
+
+STEP 4 — If a video gives only a vague location ("Canada", "Asia"), use the user's specified destination city and apply your own knowledge to name the most relevant, well-known specific venues in that city for the activity type.
+
+FORBIDDEN location values (will be rejected):
+- Any value containing "City Center", "District 1", "Zone", "Area", "Row", "Square" as generic suffixes
+- Country-only values ("Japan", "Canada", "France")
+- Vague labels ("local café", "nearby restaurant", "famous street")

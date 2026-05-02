@@ -331,6 +331,7 @@ function SwipeStep({
   const { location, tags: initialTags, season } = tripData;
   const [queue, setQueue] = useState<ShortVideo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const [index, setIndex] = useState(0);
   const [liked, setLiked] = useState<string[]>([]);
@@ -344,6 +345,15 @@ function SwipeStep({
   const pageRef = useRef(Math.floor(Math.random() * 6));
   const fetching = useRef(false);
   const seenIds = useRef(new Set<string>());
+  const streamUrlCache = useRef(new Map<string, string>());
+
+  const prefetchStreamUrl = (videoId: string) => {
+    if (streamUrlCache.current.has(videoId)) return;
+    fetch(`/api/stream-url?v=${videoId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (data?.url) streamUrlCache.current.set(videoId, data.url); })
+      .catch(() => {});
+  };
 
   const getNextExtra = () => {
     const candidates = Object.entries(weights.current).filter(([, w]) => w > 0.6).sort(([, a], [, b]) => b - a);
@@ -365,6 +375,7 @@ function SwipeStep({
   const fetchMore = async () => {
     if (fetching.current) return;
     fetching.current = true;
+    setLoadingMore(true);
     try {
       const extra = getNextExtra();
       const items = await fetchShorts(location, pageRef.current, extra);
@@ -372,39 +383,27 @@ function SwipeStep({
       const fresh = spreadSimilar(shuffle(filterRelevant(items.filter((v) => !seenIds.current.has(v.videoId)))));
       fresh.forEach((v) => seenIds.current.add(v.videoId));
       if (fresh.length > 0) setQueue((prev) => [...prev, ...fresh]);
-    } catch { /* silent */ } finally { fetching.current = false; }
+    } catch { /* silent */ } finally { fetching.current = false; setLoadingMore(false); }
   };
 
   useEffect(() => {
     let active = true;
     const startPage = pageRef.current;
-
-    // Build 3 different query flavors from the user's top tags for variety on first load
-    const tagExtras = [
-      ...initialTags.map((tag) =>
-        [location, season.toLowerCase(), TAG_SEARCH_TERMS[tag] ?? tag.toLowerCase()].filter(Boolean).join(" ")
-      ),
-      [location, "vacation", season.toLowerCase()].join(" "),
-    ].slice(0, 3);
-    while (tagExtras.length < 3) tagExtras.push([location, "travel", season.toLowerCase()].join(" "));
+    const firstExtra = initialTags.length > 0
+      ? [location, season.toLowerCase(), TAG_SEARCH_TERMS[initialTags[0]] ?? initialTags[0].toLowerCase()].filter(Boolean).join(" ")
+      : [location, "vacation", season.toLowerCase()].join(" ");
 
     (async () => {
       try {
-        const results = await Promise.all(
-          tagExtras.map((extra, i) => fetchShorts(location, startPage + i, extra))
-        );
+        const items = await fetchShorts(location, startPage, firstExtra);
         if (!active) return;
-        pageRef.current = startPage + 3;
-        const localSeen = new Set<string>();
-        const allItems = results.flat().filter((v) => {
-          if (seenIds.current.has(v.videoId) || localSeen.has(v.videoId)) return false;
-          localSeen.add(v.videoId);
-          return true;
-        });
-        const fresh = spreadSimilar(shuffle(filterRelevant(allItems)));
+        pageRef.current = startPage + 1;
+        const fresh = spreadSimilar(shuffle(filterRelevant(
+          items.filter((v) => !seenIds.current.has(v.videoId))
+        )));
         fresh.forEach((v) => seenIds.current.add(v.videoId));
-        if (fresh.length > 0) setQueue(fresh);
-        else setError("No videos found for this location.");
+        if (fresh.length === 0) { setError("No videos found for this location."); return; }
+        setQueue(fresh);
       } catch {
         if (active) setError("Couldn't load shorts — is the shorts backend running?");
       } finally {
@@ -416,6 +415,11 @@ function SwipeStep({
 
   useEffect(() => {
     if (queue.length === 0) return;
+    // Pre-fetch CDN URLs for current + 3 ahead so they're ready before the user swipes
+    for (let ahead = 0; ahead <= 3; ahead++) {
+      const v = queue[index + ahead];
+      if (v) prefetchStreamUrl(v.videoId);
+    }
     for (let ahead = 1; ahead <= 2; ahead++) {
       const el = videoRefs.current[index + ahead];
       const v = queue[index + ahead];
@@ -423,7 +427,11 @@ function SwipeStep({
     }
     const currentEl = videoRefs.current[index];
     if (currentEl) {
-      if (!currentEl.src) currentEl.src = `/api/proxy?v=${queue[index].videoId}`;
+      if (!currentEl.src) {
+        // Use pre-fetched CDN URL directly if available, avoids proxy redirect round-trip
+        const cached = streamUrlCache.current.get(queue[index].videoId);
+        currentEl.src = cached ?? `/api/proxy?v=${queue[index].videoId}`;
+      }
       currentEl.play().catch(() => {});
     }
     if (index > 0) videoRefs.current[index - 1]?.pause();
@@ -439,18 +447,17 @@ function SwipeStep({
   };
 
   const swipe = (dir: "left" | "right") => {
-    if (animTimeout.current || loading || queue.length === 0) return;
+    if (animTimeout.current || loading || queue.length === 0 || index >= queue.length) return;
     const current = queue[index];
     updateWeights(current, dir);
-    if (dir === "right") fetchMore();
+    fetchMore();
     setAnimDir(dir);
     animTimeout.current = setTimeout(() => {
       const newLiked = dir === "right" ? [...liked, current.videoId] : liked;
       if (dir === "right") setLiked(newLiked);
       setAnimDir(null);
       animTimeout.current = null;
-      if (index + 1 >= queue.length) onDone(newLiked);
-      else setIndex((i) => i + 1);
+      setIndex((i) => i + 1);
     }, 350);
   };
 
@@ -463,10 +470,8 @@ function SwipeStep({
     return () => window.removeEventListener("keydown", h);
   });
 
-  if (!loading && queue.length > 0 && index >= queue.length) { onDone(liked); return null; }
-
   const current = queue[index];
-  const remaining = queue.length - index;
+  const remaining = Math.max(0, queue.length - index);
 
   const cardAnim: React.CSSProperties = {
     transition: "transform 0.35s var(--m3-easing-emph), opacity 0.35s var(--m3-easing-emph)",
@@ -520,6 +525,11 @@ function SwipeStep({
                 <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "1.5rem", textAlign: "center", color: "var(--m3-on-surface-variant)", fontSize: 14 }}>
                   {error}
                 </div>
+              ) : index >= queue.length ? (
+                <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 12 }}>
+                  <div className="m3-blob" style={{ width: 80, height: 80, animation: "m3-blob1 4s ease-in-out infinite" }} />
+                  <span style={{ color: "var(--m3-on-surface-variant)", fontSize: 14 }}>Finding more videos…</span>
+                </div>
               ) : (
                 queue.map((_, i) => (
                   <video
@@ -565,7 +575,7 @@ function SwipeStep({
               </div>
               <div style={{ background: "var(--m3-surface-container-low)", borderRadius: 12, padding: "10px 12px" }}>
                 <div style={{ fontSize: 11, color: "var(--m3-on-surface-variant)", textTransform: "uppercase", letterSpacing: ".06em" }}>Remaining</div>
-                <div className="display-font" style={{ fontSize: 24, fontWeight: 500 }}>{loading ? "…" : remaining}</div>
+                <div className="display-font" style={{ fontSize: 24, fontWeight: 500 }}>{loading || loadingMore ? "…" : remaining}</div>
               </div>
             </div>
           </div>
@@ -661,14 +671,10 @@ function ReviewStep({
                 </h2>
                 <M3Button variant="text" icon="refresh" onClick={onBack}>Swipe more</M3Button>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))", gap: 12 }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {likedVideos.map((id) => (
-                  <div key={id} style={{ aspectRatio: "9/16", position: "relative", overflow: "hidden", borderRadius: 16 }}>
-                    <img
-                      src={`https://i.ytimg.com/vi/${id}/hqdefault.jpg`}
-                      alt="liked short"
-                      style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", objectFit: "cover" }}
-                    />
+                  <div key={id} style={{ padding: "6px 12px", borderRadius: 8, background: "var(--m3-surface-container-low)", fontSize: 13, fontFamily: "monospace", color: "var(--m3-on-surface-variant)" }}>
+                    {id}
                   </div>
                 ))}
               </div>
