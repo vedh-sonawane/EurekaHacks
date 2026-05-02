@@ -46,7 +46,7 @@ export default function GetStartedScreen() {
             onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-2px)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 8px 32px rgba(254,40,88,0.55)"; }}
             onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.transform = "none"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 4px 24px rgba(254,40,88,0.45)"; }}
           >
-            Get Started ✈️
+            Get Started
           </button>
           <button
             onClick={() => navigate("/create-trip")}
@@ -63,9 +63,9 @@ export default function GetStartedScreen() {
 
         {/* Social proof strip */}
         <div style={{ marginTop: "3rem", display: "flex", gap: "2.5rem", flexWrap: "wrap" }}>
-          {[["🌍", "50+ destinations"], ["🎬", "YouTube Shorts"], ["⚡", "Instant results"]].map(([icon, text]) => (
-            <div key={text} style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "#aaa", fontSize: "0.9rem" }}>
-              <span style={{ fontSize: "1.1rem" }}>{icon}</span> {text}
+          {["50+ destinations", "YouTube Shorts", "Instant results"].map((text) => (
+            <div key={text} style={{ color: "#aaa", fontSize: "0.9rem" }}>
+              {text}
             </div>
           ))}
         </div>

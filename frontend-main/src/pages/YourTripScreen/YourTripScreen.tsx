@@ -51,7 +51,7 @@ export default function YourTripScreen() {
           <div>
             <p style={{ color: "#888", margin: 0, fontSize: "0.95rem" }}>Here's what we've planned.</p>
             <h1 style={{ margin: "0.3rem 0 0.4rem", fontSize: "2.6rem", fontWeight: 800 }}>
-              ✈️ {itinerary.location}
+              {itinerary.location}
             </h1>
             <p style={{ color: "#666", margin: 0 }}>
               {first.startTime} – {last.endTime} · {itinerary.activities.length} activities
@@ -84,7 +84,7 @@ export default function YourTripScreen() {
                 <div style={{ fontSize: "1.05rem", fontWeight: 600, marginBottom: "0.25rem" }}>
                   {act.activity}
                 </div>
-                <div style={{ color: "#666", fontSize: "0.88rem" }}>📍 {act.location}</div>
+                <div style={{ color: "#666", fontSize: "0.88rem" }}>{act.location}</div>
               </div>
             </div>
           ))}
