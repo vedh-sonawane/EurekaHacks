@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { ITINERARY_API, SHORTS_API } from "../../utils/config";
 import { useNavigate } from "react-router-dom";
 import { ActivityTag } from "../../utils/types";
 import { Sym, M3Button, M3IconBtn, M3FAB, M3Chip, M3TextField, M3Segmented, StepBar } from "../../components/M3";
@@ -40,7 +41,7 @@ type ShortVideo = {
 async function fetchShorts(location: string, page = 0, extra = ""): Promise<ShortVideo[]> {
   const params = new URLSearchParams({ page: String(page), location });
   if (extra) params.set("extra", extra);
-  const res = await fetch(`/api/feed?${params}`);
+  const res = await fetch(`${SHORTS_API}/api/feed?${params}`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = await res.json();
   return data.items ?? [];
@@ -419,7 +420,7 @@ function SwipeStep({
     for (let ahead = 1; ahead <= 2; ahead++) {
       const el = videoRefs.current[index + ahead];
       const v = queue[index + ahead];
-      if (el && v && !el.src) el.src = `/api/proxy?v=${v.videoId}`;
+      if (el && v && !el.src) el.src = `${SHORTS_API}/api/proxy?v=${v.videoId}`;
     }
     const currentEl = videoRefs.current[index];
     if (currentEl) {
@@ -731,7 +732,7 @@ export default function FormScreen() {
       const params = new URLSearchParams({ prompt });
       if (videoUrls) params.set("video_urls", videoUrls);
 
-      const res = await fetch(`/itinerary-api/generate_itinerary?${params}`, { method: "POST" });
+      const res = await fetch(`${ITINERARY_API}/generate_itinerary?${params}`, { method: "POST" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       const itinerary = { location: tripData!.location, days: tripData!.days, ...data.itinerary };

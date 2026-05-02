@@ -5,8 +5,10 @@ export interface SavedItinerary {
   data: Record<string, unknown>;
 }
 
+import { ITINERARY_API } from "./config";
+
 export async function saveItinerary(itinerary: Record<string, unknown>, token: string): Promise<string> {
-  const res = await fetch("/itinerary-api/save_itinerary", {
+  const res = await fetch(`${ITINERARY_API}/save_itinerary`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify(itinerary),
@@ -16,7 +18,7 @@ export async function saveItinerary(itinerary: Record<string, unknown>, token: s
 }
 
 export async function fetchMyItineraries(token: string): Promise<SavedItinerary[]> {
-  const res = await fetch("/itinerary-api/my_itineraries", {
+  const res = await fetch(`${ITINERARY_API}/my_itineraries`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -24,7 +26,7 @@ export async function fetchMyItineraries(token: string): Promise<SavedItinerary[
 }
 
 export async function deleteItinerary(id: string, token: string): Promise<void> {
-  const res = await fetch(`/itinerary-api/delete_itinerary/${id}`, {
+  const res = await fetch(`${ITINERARY_API}/delete_itinerary/${id}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
   });
