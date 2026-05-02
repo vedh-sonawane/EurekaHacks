@@ -1,10 +1,39 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ActivityTag } from "../../utils/types";
+import { Sym, M3Button, M3IconBtn, M3FAB, M3Chip, M3TextField, M3Segmented, StepBar } from "../../components/M3";
 
 const ALL_TAGS = Object.values(ActivityTag);
 const SEASONS = ["Spring", "Summer", "Fall", "Winter"] as const;
 type Season = (typeof SEASONS)[number];
+
+const SEASON_ICONS: Record<Season, string> = {
+  Spring: "local_florist",
+  Summer: "wb_sunny",
+  Fall: "eco",
+  Winter: "ac_unit",
+};
+
+const TAG_ICONS: Partial<Record<ActivityTag, string>> = {
+  [ActivityTag.Sightseeing]: "tour",
+  [ActivityTag.Beach]: "beach_access",
+  [ActivityTag.Hiking]: "hiking",
+  [ActivityTag.Dining]: "restaurant",
+  [ActivityTag.Adventure]: "paragliding",
+  [ActivityTag.Relaxation]: "self_improvement",
+  [ActivityTag.Nightlife]: "nightlife",
+  [ActivityTag.Wildlife]: "pets",
+  [ActivityTag.CulturalExperience]: "temple_buddhist",
+  [ActivityTag.Festival]: "celebration",
+  [ActivityTag.RoadTrip]: "directions_car",
+  [ActivityTag.Camping]: "forest",
+  [ActivityTag.Spa]: "spa",
+  [ActivityTag.Photography]: "photo_camera",
+  [ActivityTag.Entertainment]: "theater_comedy",
+  [ActivityTag.History]: "account_balance",
+  [ActivityTag.FamilyFun]: "family_restroom",
+  [ActivityTag.ThemePark]: "attractions",
+};
 
 type ShortVideo = {
   videoId: string;
@@ -14,11 +43,7 @@ type ShortVideo = {
   viewCount: number | null;
 };
 
-async function fetchShorts(
-  location: string,
-  page = 0,
-  extra = "",
-): Promise<ShortVideo[]> {
+async function fetchShorts(location: string, page = 0, extra = ""): Promise<ShortVideo[]> {
   const params = new URLSearchParams({ page: String(page), location });
   if (extra) params.set("extra", extra);
   const res = await fetch(`/api/feed?${params}`);
@@ -30,172 +55,46 @@ async function fetchShorts(
 const MOCK_ITINERARY = (location: string, tags: string[]) => ({
   location,
   activities: [
-    {
-      startTime: "8:00",
-      endTime: "9:30",
-      activity: "Breakfast at a local café",
-      location: `${location} City Center`,
-    },
-    {
-      startTime: "10:00",
-      endTime: "12:00",
-      activity:
-        tags.includes("Museum") || tags.includes("History")
-          ? "Visit the main historical museum"
-          : "Morning exploration walk",
-      location: `${location} Old Town`,
-    },
-    {
-      startTime: "12:30",
-      endTime: "13:30",
-      activity: tags.includes("Dining")
-        ? "Lunch at a renowned local restaurant"
-        : "Lunch at a street food market",
-      location: `${location} Market Square`,
-    },
-    {
-      startTime: "14:00",
-      endTime: "16:00",
-      activity: tags.includes("Hiking")
-        ? "Scenic hike with city views"
-        : tags.includes("Beach")
-          ? "Afternoon at the beach"
-          : "Explore the botanical gardens",
-      location: `${location} East Side`,
-    },
-    {
-      startTime: "16:30",
-      endTime: "18:00",
-      activity: tags.includes("Shopping")
-        ? "Shopping at local boutiques"
-        : "Wander through the local markets",
-      location: `${location} Shopping District`,
-    },
-    {
-      startTime: "19:00",
-      endTime: "21:00",
-      activity: tags.includes("Nightlife")
-        ? "Bar hopping in the nightlife district"
-        : "Dinner at a rooftop restaurant",
-      location: `${location} Skyline Avenue`,
-    },
+    { startTime: "8:00",  endTime: "9:30",  activity: "Breakfast at a local café",             location: `${location} City Center` },
+    { startTime: "10:00", endTime: "12:00", activity: tags.includes("Museum") || tags.includes("History") ? "Visit the main historical museum" : "Morning exploration walk", location: `${location} Old Town` },
+    { startTime: "12:30", endTime: "13:30", activity: tags.includes("Dining") ? "Lunch at a renowned local restaurant" : "Lunch at a street food market", location: `${location} Market Square` },
+    { startTime: "14:00", endTime: "16:00", activity: tags.includes("Hiking") ? "Scenic hike with city views" : tags.includes("Beach") ? "Afternoon at the beach" : "Explore the botanical gardens", location: `${location} East Side` },
+    { startTime: "16:30", endTime: "18:00", activity: tags.includes("Shopping") ? "Shopping at local boutiques" : "Wander through the local markets", location: `${location} Shopping District` },
+    { startTime: "19:00", endTime: "21:00", activity: tags.includes("Nightlife") ? "Bar hopping in the nightlife district" : "Dinner at a rooftop restaurant", location: `${location} Skyline Avenue` },
   ],
 });
 
-// ── Tag → keyword map for inferring video content from title ──────────────────
 const TAG_KEYWORDS: Partial<Record<ActivityTag, string[]>> = {
-  [ActivityTag.Sightseeing]: [
-    "sightseeing",
-    "landmark",
-    "monument",
-    "attractions",
-    "tourist",
-  ],
+  [ActivityTag.Sightseeing]: ["sightseeing", "landmark", "monument", "attractions", "tourist"],
   [ActivityTag.Beach]: ["beach", "ocean", "coast", "surf", "sand", "sea"],
   [ActivityTag.Hiking]: ["hike", "hiking", "trail", "trek", "mountain"],
-  [ActivityTag.Dining]: [
-    "food",
-    "restaurant",
-    "eat",
-    "cuisine",
-    "dining",
-    "dish",
-  ],
-  [ActivityTag.Adventure]: [
-    "adventure",
-    "extreme",
-    "thrill",
-    "adrenaline",
-    "outdoor",
-  ],
-  [ActivityTag.Relaxation]: [
-    "relax",
-    "peaceful",
-    "calm",
-    "tranquil",
-    "retreat",
-  ],
+  [ActivityTag.Dining]: ["food", "restaurant", "eat", "cuisine", "dining", "dish"],
+  [ActivityTag.Adventure]: ["adventure", "extreme", "thrill", "adrenaline", "outdoor"],
+  [ActivityTag.Relaxation]: ["relax", "peaceful", "calm", "tranquil", "retreat"],
   [ActivityTag.Nightlife]: ["nightlife", "bar", "club", "night", "party"],
   [ActivityTag.Wildlife]: ["wildlife", "animals", "safari", "nature", "wild"],
-  [ActivityTag.CulturalExperience]: [
-    "culture",
-    "cultural",
-    "tradition",
-    "local",
-    "temple",
-    "heritage",
-  ],
-  [ActivityTag.Festival]: [
-    "festival",
-    "celebration",
-    "event",
-    "carnival",
-    "fair",
-  ],
-  [ActivityTag.RoadTrip]: [
-    "road trip",
-    "roadtrip",
-    "drive",
-    "driving",
-    "scenic drive",
-  ],
+  [ActivityTag.CulturalExperience]: ["culture", "cultural", "tradition", "local", "temple", "heritage"],
+  [ActivityTag.Festival]: ["festival", "celebration", "event", "carnival", "fair"],
+  [ActivityTag.RoadTrip]: ["road trip", "roadtrip", "drive", "driving", "scenic drive"],
   [ActivityTag.Camping]: ["camp", "camping", "outdoors", "wilderness", "tent"],
   [ActivityTag.Spa]: ["spa", "massage", "wellness", "hot spring", "thermal"],
-  [ActivityTag.Photography]: [
-    "photography",
-    "photo",
-    "instagram",
-    "scenic",
-    "viewpoint",
-  ],
-  [ActivityTag.Entertainment]: [
-    "entertainment",
-    "show",
-    "concert",
-    "performance",
-    "theater",
-  ],
-  [ActivityTag.History]: [
-    "history",
-    "historical",
-    "ancient",
-    "heritage",
-    "ruins",
-  ],
-  [ActivityTag.FamilyFun]: [
-    "family",
-    "kids",
-    "family-friendly",
-    "children",
-    "playground",
-  ],
-  [ActivityTag.ThemePark]: [
-    "theme park",
-    "amusement",
-    "rides",
-    "disney",
-    "universal",
-  ],
+  [ActivityTag.Photography]: ["photography", "photo", "instagram", "scenic", "viewpoint"],
+  [ActivityTag.Entertainment]: ["entertainment", "show", "concert", "performance", "theater"],
+  [ActivityTag.History]: ["history", "historical", "ancient", "heritage", "ruins"],
+  [ActivityTag.FamilyFun]: ["family", "kids", "family-friendly", "children", "playground"],
+  [ActivityTag.ThemePark]: ["theme park", "amusement", "rides", "disney", "universal"],
 };
 
 function spreadSimilar(videos: ShortVideo[]): ShortVideo[] {
   if (videos.length <= 2) return videos;
   const stop = new Set(["a","an","the","in","at","of","to","and","for","with","my","your","this","is","on","from"]);
-  const kw = (title: string) =>
-    new Set(title.toLowerCase().split(/\W+/).filter((w) => w.length > 3 && !stop.has(w)));
-  const overlaps = (a: ShortVideo, b: ShortVideo) => {
-    const ka = kw(a.title);
-    for (const w of kw(b.title)) if (ka.has(w)) return true;
-    return false;
-  };
+  const kw = (title: string) => new Set(title.toLowerCase().split(/\W+/).filter((w) => w.length > 3 && !stop.has(w)));
+  const overlaps = (a: ShortVideo, b: ShortVideo) => { const ka = kw(a.title); for (const w of kw(b.title)) if (ka.has(w)) return true; return false; };
   const result = [...videos];
   for (let i = 0; i < result.length - 1; i++) {
     if (overlaps(result[i], result[i + 1])) {
       for (let j = i + 2; j < result.length; j++) {
-        if (!overlaps(result[i], result[j])) {
-          [result[i + 1], result[j]] = [result[j], result[i + 1]];
-          break;
-        }
+        if (!overlaps(result[i], result[j])) { [result[i + 1], result[j]] = [result[j], result[i + 1]]; break; }
       }
     }
   }
@@ -204,99 +103,43 @@ function spreadSimilar(videos: ShortVideo[]): ShortVideo[] {
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
   return a;
 }
 
 function inferTags(title: string): ActivityTag[] {
   const lower = title.toLowerCase();
-  return ALL_TAGS.filter((tag) =>
-    TAG_KEYWORDS[tag]?.some((kw) => lower.includes(kw)),
-  );
+  return ALL_TAGS.filter((tag) => TAG_KEYWORDS[tag]?.some((kw) => lower.includes(kw)));
 }
 
-// Best YouTube search term for each activity — these produce far better short-form results
-// than lowercasing the enum display value (e.g. "food tour" beats "dining", "historical sites" beats "history")
 const TAG_SEARCH_TERMS: Partial<Record<ActivityTag, string>> = {
-  [ActivityTag.Sightseeing]: "sightseeing",
-  [ActivityTag.Beach]: "beach",
-  [ActivityTag.Hiking]: "hiking",
-  [ActivityTag.Dining]: "food tour",
-  [ActivityTag.Adventure]: "adventure",
-  [ActivityTag.Relaxation]: "relaxation",
-  [ActivityTag.Nightlife]: "nightlife",
-  [ActivityTag.Wildlife]: "wildlife",
-  [ActivityTag.CulturalExperience]: "cultural experience",
-  [ActivityTag.Festival]: "festival",
-  [ActivityTag.RoadTrip]: "road trip",
-  [ActivityTag.Camping]: "camping",
-  [ActivityTag.Spa]: "spa wellness",
-  [ActivityTag.Photography]: "photography spots",
-  [ActivityTag.Entertainment]: "entertainment",
-  [ActivityTag.History]: "historical sites",
-  [ActivityTag.FamilyFun]: "family friendly",
-  [ActivityTag.ThemePark]: "theme park",
+  [ActivityTag.Sightseeing]: "sightseeing", [ActivityTag.Beach]: "beach",
+  [ActivityTag.Hiking]: "hiking", [ActivityTag.Dining]: "food tour",
+  [ActivityTag.Adventure]: "adventure", [ActivityTag.Relaxation]: "relaxation",
+  [ActivityTag.Nightlife]: "nightlife", [ActivityTag.Wildlife]: "wildlife",
+  [ActivityTag.CulturalExperience]: "cultural experience", [ActivityTag.Festival]: "festival",
+  [ActivityTag.RoadTrip]: "road trip", [ActivityTag.Camping]: "camping",
+  [ActivityTag.Spa]: "spa wellness", [ActivityTag.Photography]: "photography spots",
+  [ActivityTag.Entertainment]: "entertainment", [ActivityTag.History]: "historical sites",
+  [ActivityTag.FamilyFun]: "family friendly", [ActivityTag.ThemePark]: "theme park",
 };
 
-// ── Location guard ────────────────────────────────────────────────────────────
-// Known countries and major tourist cities. If a video title explicitly names
-// one of these and it doesn't overlap with the user's destination, the video
-// is from the wrong country and gets filtered out.
 const KNOWN_PLACES = [
-  "japan","tokyo","osaka","kyoto","hiroshima","sapporo",
-  "france","paris","nice","lyon","bordeaux",
-  "italy","rome","milan","venice","florence","naples","sicily",
-  "spain","madrid","barcelona","seville","ibiza","mallorca",
-  "thailand","bangkok","phuket","chiang mai","koh samui",
-  "indonesia","bali","jakarta","lombok","yogyakarta",
-  "vietnam","hanoi","ho chi minh","da nang","hoi an",
-  "india","mumbai","delhi","goa","jaipur","agra","kerala",
-  "china","beijing","shanghai","chengdu","guilin","xi'an",
-  "korea","seoul","busan","jeju",
-  "australia","sydney","melbourne","brisbane","cairns","perth",
-  "usa","america","new york","los angeles","miami","chicago","hawaii","las vegas","san francisco","new orleans","orlando",
-  "uk","england","london","edinburgh","scotland","ireland","dublin",
-  "germany","berlin","munich","hamburg","frankfurt",
-  "netherlands","amsterdam","rotterdam",
-  "greece","athens","santorini","mykonos","crete",
-  "turkey","istanbul","cappadocia","antalya",
-  "mexico","cancun","mexico city","tulum","cabo","oaxaca",
-  "brazil","rio de janeiro","sao paulo","salvador","florianopolis",
-  "canada","toronto","vancouver","montreal","banff","quebec",
-  "singapore",
-  "malaysia","kuala lumpur","penang","langkawi",
-  "philippines","manila","cebu","palawan","boracay",
-  "new zealand","auckland","queenstown","rotorua",
-  "egypt","cairo","luxor","aswan",
-  "morocco","marrakech","casablanca","fez",
-  "dubai","abu dhabi","uae",
-  "maldives",
-  "sri lanka","colombo","sigiriya",
-  "portugal","lisbon","porto","algarve",
-  "croatia","dubrovnik","split","zagreb",
-  "iceland","reykjavik",
-  "peru","lima","machu picchu","cusco",
-  "argentina","buenos aires","patagonia",
-  "colombia","bogota","cartagena","medellin",
-  "switzerland","zurich","geneva","interlaken",
-  "austria","vienna","salzburg","innsbruck",
-  "czech republic","prague",
-  "hungary","budapest",
-  "poland","warsaw","krakow",
-  "taiwan","taipei","tainan",
-  "hong kong",
-  "cambodia","siem reap","phnom penh",
-  "myanmar","yangon","bagan",
-  "nepal","kathmandu","pokhara",
-  "kenya","nairobi","masai mara","mombasa",
-  "south africa","cape town","johannesburg","safari",
-  "cuba","havana",
-  "costa rica","san jose","manuel antonio",
-  "jamaica","montego bay","kingston",
-  "bahamas","nassau",
+  "japan","tokyo","osaka","kyoto","france","paris","italy","rome","milan","venice",
+  "spain","madrid","barcelona","thailand","bangkok","phuket","indonesia","bali","jakarta",
+  "vietnam","hanoi","india","mumbai","delhi","goa","china","beijing","shanghai",
+  "korea","seoul","australia","sydney","melbourne","usa","america","new york","los angeles",
+  "miami","hawaii","las vegas","uk","england","london","germany","berlin","munich",
+  "netherlands","amsterdam","greece","athens","santorini","turkey","istanbul",
+  "mexico","cancun","brazil","rio de janeiro","canada","toronto","vancouver",
+  "singapore","malaysia","kuala lumpur","philippines","manila","cebu","palawan",
+  "new zealand","auckland","queenstown","egypt","cairo","morocco","marrakech",
+  "dubai","abu dhabi","uae","maldives","portugal","lisbon","porto","croatia","dubrovnik",
+  "iceland","reykjavik","peru","lima","argentina","buenos aires","colombia","bogota",
+  "switzerland","zurich","austria","vienna","czech republic","prague","hungary","budapest",
+  "poland","warsaw","taiwan","taipei","hong kong","cambodia","siem reap",
+  "nepal","kathmandu","kenya","nairobi","south africa","cape town","cuba","havana",
+  "costa rica","jamaica","bahamas",
 ];
 
 function parseLocationTerms(location: string): string[] {
@@ -305,271 +148,144 @@ function parseLocationTerms(location: string): string[] {
 
 function isLocationMatch(title: string, locationTerms: string[]): boolean {
   const lower = title.toLowerCase();
-  // Explicitly mentions the user's destination → always keep
   if (locationTerms.some((t) => lower.includes(t))) return true;
-  // Mentions a known place that doesn't overlap with user's destination → reject
   for (const place of KNOWN_PLACES) {
-    if (lower.includes(place) && !locationTerms.some((t) => place.includes(t) || t.includes(place))) {
-      return false;
-    }
+    if (lower.includes(place) && !locationTerms.some((t) => place.includes(t) || t.includes(place))) return false;
   }
-  // No recognisable location in title → neutral, trust the search term
   return true;
 }
 
-// ── Shared styles ─────────────────────────────────────────────────────────────
-const s: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: "calc(100vh - 65px)",
-    background: "#0f0f0f",
-    color: "white",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    padding: "3rem 2rem",
-  },
-  card: {
-    background: "#1a1a1a",
-    borderRadius: "16px",
-    padding: "2.5rem",
-    width: "100%",
-    maxWidth: "860px",
-  },
-  input: {
-    width: "100%",
-    padding: "0.7rem 1rem",
-    borderRadius: "8px",
-    border: "1px solid #333",
-    background: "#111",
-    color: "white",
-    fontSize: "1rem",
-    boxSizing: "border-box",
-  },
-  label: {
-    display: "block",
-    marginBottom: "0.4rem",
-    color: "#aaa",
-    fontSize: "0.9rem",
-  },
-  btn: {
-    padding: "0.8rem 2rem",
-    borderRadius: "8px",
-    border: "none",
-    background: "#FE2858",
-    color: "white",
-    fontSize: "1rem",
-    cursor: "pointer",
-    fontWeight: "bold",
-  },
-  btnGhost: {
-    padding: "0.8rem 2rem",
-    borderRadius: "8px",
-    border: "1px solid #444",
-    background: "transparent",
-    color: "#aaa",
-    fontSize: "1rem",
-    cursor: "pointer",
-  },
-  stepBar: {
-    display: "flex",
-    gap: "0.5rem",
-    marginBottom: "2.5rem",
-    alignItems: "center",
-  },
-};
+// ── Trip Details ──────────────────────────────────────────────────────────────
+type TripData = { location: string; days: number; season: Season; tags: ActivityTag[]; comments: string };
 
-// ── Step indicator ────────────────────────────────────────────────────────────
-function StepBar({ step }: { step: number }) {
-  const labels = ["Trip Details", "Swipe Videos", "Review"];
-  return (
-    <div style={s.stepBar}>
-      {labels.map((label, i) => (
-        <div
-          key={i}
-          style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}
-        >
-          <div
-            style={{
-              width: 30,
-              height: 30,
-              borderRadius: "50%",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: "0.85rem",
-              fontWeight: "bold",
-              background: step >= i ? "#FE2858" : "#333",
-              color: "white",
-            }}
-          >
-            {i + 1}
-          </div>
-          <span
-            style={{
-              color: step === i ? "white" : "#666",
-              fontSize: "0.95rem",
-            }}
-          >
-            {label}
-          </span>
-          {i < 2 && (
-            <span style={{ color: "#444", margin: "0 0.4rem" }}>›</span>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ── Step 1: Trip Details ──────────────────────────────────────────────────────
-type TripData = {
-  location: string;
-  seasons: Season[];
-  tags: ActivityTag[];
-  comments: string;
-};
-
-function TripDetailsStep({ onNext }: { onNext: (data: TripData) => void }) {
+function TripDetailsStep({ onNext, onBack }: { onNext: (data: TripData) => void; onBack: () => void }) {
   const [location, setLocation] = useState("");
-  const [seasons, setSeasons] = useState<Season[]>([]);
+  const [days, setDays] = useState(5);
+  const [season, setSeason] = useState<Season>("Spring");
   const [tags, setTags] = useState<ActivityTag[]>([]);
   const [comments, setComments] = useState("");
   const [error, setError] = useState("");
 
-  const toggleSeason = (season: Season) =>
-    setSeasons((prev) =>
-      prev.includes(season)
-        ? prev.filter((x) => x !== season)
-        : [...prev, season],
-    );
-
   const toggleTag = (tag: ActivityTag) =>
-    setTags((prev) =>
-      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag],
-    );
+    setTags((prev) => prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]);
 
   const handleNext = () => {
-    if (!location || tags.length === 0) {
-      setError(
-        "Please enter a destination and select at least one activity vibe.",
-      );
+    if (!location.trim() || tags.length === 0) {
+      setError("Please enter a destination and select at least one activity vibe.");
       return;
     }
     setError("");
-    onNext({ location, seasons, tags, comments });
+    onNext({ location, days, season, tags, comments });
   };
 
   return (
-    <div style={s.card}>
-      <h2 style={{ marginTop: 0, marginBottom: "1.8rem", fontSize: "1.6rem" }}>
-        Where are you going?
-      </h2>
-
-      <div style={{ marginBottom: "1.5rem" }}>
-        <label style={s.label}>Destination *</label>
-        <input
-          style={s.input}
-          placeholder="e.g. Tokyo, Japan"
-          value={location}
-          onChange={(e) => setLocation(e.target.value)}
-        />
+    <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+      {/* App bar */}
+      <div className="m3-appbar">
+        <M3IconBtn icon="arrow_back" onClick={onBack} />
+        <div className="title">Plan a trip</div>
+        <div style={{ padding: "0 16px" }}><StepBar step={0} /></div>
       </div>
 
-      <div style={{ marginBottom: "1.5rem" }}>
-        <label style={s.label}>
-          Season <span style={{ color: "#555" }}>(optional)</span>
-        </label>
-        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-          {SEASONS.map((season) => (
-            <span
-              key={season}
-              onClick={() => toggleSeason(season)}
-              style={{
-                padding: "0.35rem 0.85rem",
-                borderRadius: "20px",
-                cursor: "pointer",
-                fontSize: "0.85rem",
-                background: seasons.includes(season) ? "#FE2858" : "#2a2a2a",
-                border: `1px solid ${seasons.includes(season) ? "#FE2858" : "#444"}`,
-                color: "white",
-                userSelect: "none",
-                transition: "background 0.15s",
-              }}
-            >
-              {season}
-            </span>
-          ))}
+      {/* Content */}
+      <div style={{ flex: 1, overflow: "auto", padding: "8px 24px 120px", display: "flex", justifyContent: "center" }}>
+        <div style={{ width: "100%", maxWidth: 720, display: "flex", flexDirection: "column", gap: 28 }}>
+          <div>
+            <h1 className="display-font" style={{ fontSize: 36, fontWeight: 500, margin: 0, letterSpacing: "-0.01em" }}>Where to?</h1>
+            <p style={{ color: "var(--m3-on-surface-variant)", marginTop: 8, fontSize: 15 }}>
+              Tell us a bit about the trip and we'll find shorts to inspire it.
+            </p>
+          </div>
+
+          <M3TextField
+            label="Destination"
+            leadingIcon="location_on"
+            value={location}
+            onChange={(e) => setLocation((e.target as HTMLInputElement).value)}
+          />
+
+          {/* Days */}
+          <div>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 10 }}>
+              <div style={{ fontSize: 14, fontWeight: 500, color: "var(--m3-on-surface-variant)" }}>Trip length</div>
+              <div className="display-font" style={{ fontSize: 28, fontWeight: 500 }}>
+                {days} <span style={{ fontSize: 14, color: "var(--m3-on-surface-variant)", fontWeight: 400 }}>day{days !== 1 ? "s" : ""}</span>
+              </div>
+            </div>
+            <input type="range" min="1" max="14" value={days} onChange={(e) => setDays(+e.target.value)} />
+          </div>
+
+          {/* Season */}
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 500, color: "var(--m3-on-surface-variant)", marginBottom: 10 }}>Season</div>
+            <M3Segmented
+              value={season}
+              onChange={(v) => setSeason(v as Season)}
+              options={SEASONS.map((s) => ({ value: s, label: s, icon: SEASON_ICONS[s] }))}
+              style={{ flexWrap: "wrap" }}
+            />
+          </div>
+
+          {/* Vibes */}
+          <div>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 10 }}>
+              <div style={{ fontSize: 14, fontWeight: 500, color: "var(--m3-on-surface-variant)" }}>What's your vibe?</div>
+              <div style={{ fontSize: 12, color: "var(--m3-on-surface-variant)" }}>{tags.length} selected</div>
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {ALL_TAGS.map((tag) => (
+                <M3Chip
+                  key={tag}
+                  icon={TAG_ICONS[tag]}
+                  selected={tags.includes(tag)}
+                  onClick={() => toggleTag(tag)}
+                >
+                  {tag}
+                </M3Chip>
+              ))}
+            </div>
+          </div>
+
+          <M3TextField
+            label="Anything special? (allergies, accessibility, must-sees…)"
+            multiline
+            value={comments}
+            onChange={(e) => setComments(e.target.value)}
+          />
+
+          {error && (
+            <p style={{ color: "var(--m3-error)", fontSize: 14, margin: 0 }}>{error}</p>
+          )}
         </div>
       </div>
 
-      <div style={{ marginBottom: "1.5rem" }}>
-        <label style={s.label}>Activity vibes * (pick at least one)</label>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-          {ALL_TAGS.map((tag) => (
-            <span
-              key={tag}
-              onClick={() => toggleTag(tag)}
-              style={{
-                padding: "0.35rem 0.85rem",
-                borderRadius: "20px",
-                cursor: "pointer",
-                fontSize: "0.85rem",
-                background: tags.includes(tag) ? "#FE2858" : "#2a2a2a",
-                border: `1px solid ${tags.includes(tag) ? "#FE2858" : "#444"}`,
-                color: "white",
-                userSelect: "none",
-                transition: "background 0.15s",
-              }}
-            >
-              {tag}
-            </span>
-          ))}
-        </div>
+      {/* Bottom action bar */}
+      <div
+        style={{
+          position: "sticky", bottom: 0, padding: 16,
+          background: "linear-gradient(to top, var(--m3-surface) 60%, transparent)",
+          display: "flex", justifyContent: "flex-end", gap: 12,
+          borderTop: "1px solid var(--m3-outline-variant)",
+        }}
+      >
+        <M3Button variant="text" onClick={onBack}>Cancel</M3Button>
+        <M3Button icon="swipe" onClick={handleNext}>Next: Swipe videos</M3Button>
       </div>
-
-      <div style={{ marginBottom: "1.8rem" }}>
-        <label style={s.label}>Special notes</label>
-        <textarea
-          style={
-            {
-              ...s.input,
-              height: "90px",
-              resize: "vertical",
-            } as React.CSSProperties
-          }
-          placeholder="e.g. vegetarian, wheelchair accessible..."
-          value={comments}
-          onChange={(e) => setComments(e.target.value)}
-        />
-      </div>
-
-      {error && (
-        <p
-          style={{ color: "#FE2858", marginBottom: "1rem", fontSize: "0.9rem" }}
-        >
-          {error}
-        </p>
-      )}
-
-      <button style={{ ...s.btn, minWidth: "220px" }} onClick={handleNext}>
-        Next: Swipe Videos →
-      </button>
     </div>
   );
 }
 
-// ── Step 2: Swipe Videos ──────────────────────────────────────────────────────
+// ── Swipe step ────────────────────────────────────────────────────────────────
 function SwipeStep({
-  location,
-  initialTags,
-  seasons,
+  tripData,
   onDone,
+  onBack,
 }: {
-  location: string;
-  initialTags: ActivityTag[];
-  seasons: Season[];
+  tripData: TripData;
   onDone: (liked: string[]) => void;
+  onBack: () => void;
 }) {
+  const { location, tags: initialTags, season } = tripData;
   const [queue, setQueue] = useState<ShortVideo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -577,54 +293,32 @@ function SwipeStep({
   const [liked, setLiked] = useState<string[]>([]);
   const [animDir, setAnimDir] = useState<"left" | "right" | null>(null);
   const animTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Stable video element refs — never re-created, only src/display toggled (mirrors shorts/app.js)
   const videoRefs = useRef<(HTMLVideoElement | null)[]>([]);
 
-  // Weight map: tag → score. Selected tags start at 1.0, others at 0.3.
   const weights = useRef<Record<string, number>>(
-    Object.fromEntries(
-      ALL_TAGS.map((tag) => [tag, initialTags.includes(tag) ? 1.0 : 0.3]),
-    ),
+    Object.fromEntries(ALL_TAGS.map((tag) => [tag, initialTags.includes(tag) ? 1.0 : 0.3])),
   );
   const pageRef = useRef(Math.floor(Math.random() * 6));
   const fetching = useRef(false);
   const seenIds = useRef(new Set<string>());
 
-  // Weighted-random pick: squaring the weight amplifies preference signal so
-  // initial selections (1.0) dominate non-selected tags (0.3) and liked content
-  // (up to 2.0) rises to the top quickly without completely crowding out variety.
   const getNextExtra = () => {
-    // Only pick from tags the user selected (≥1.0) or has liked into (>0.6).
-    // Non-selected neutral tags (0.3) are never used as search terms.
-    const candidates = Object.entries(weights.current)
-      .filter(([, w]) => w > 0.6)
-      .sort(([, a], [, b]) => b - a);
-    const seasonTerms = seasons.map((s) => s.toLowerCase()).join(" ");
-    if (candidates.length === 0)
-      return [location, "vacation", seasonTerms].filter(Boolean).join(" ");
+    const candidates = Object.entries(weights.current).filter(([, w]) => w > 0.6).sort(([, a], [, b]) => b - a);
+    const seasonTerm = season.toLowerCase();
+    if (candidates.length === 0) return [location, "vacation", seasonTerm].filter(Boolean).join(" ");
     const total = candidates.reduce((sum, [, w]) => sum + w * w, 0);
     let rand = Math.random() * total;
     let chosen = candidates[0][0];
-    for (const [tag, w] of candidates) {
-      rand -= w * w;
-      if (rand <= 0) { chosen = tag; break; }
-    }
+    for (const [tag, w] of candidates) { rand -= w * w; if (rand <= 0) { chosen = tag; break; } }
     const activity = TAG_SEARCH_TERMS[chosen as ActivityTag] ?? chosen.toLowerCase();
-    return [location, "vacation", seasonTerms, activity].filter(Boolean).join(" ");
+    return [location, "vacation", seasonTerm, activity].filter(Boolean).join(" ");
   };
 
   const locationTerms = parseLocationTerms(location);
-
-  // Always enforce location first — wrong-country videos are never shown.
-  // Then layer the tag filter on top; fall back to location-only if too few pass both.
   const GENERIC_TITLE = /places (on earth|in the world|around the world|you (must|need to|should) visit)|top \d+.*(places|destinations|spots|countries)|most (beautiful|amazing|incredible|stunning|underrated).*(places|destinations|countries|spots)|best (places|destinations|spots) (to visit|in the world|on earth)|\d+ (places|destinations|countries|cities) (that|you|to)/i;
-
   const filterRelevant = (items: ShortVideo[]): ShortVideo[] =>
     items.filter((v) => isLocationMatch(v.title, locationTerms) && !GENERIC_TITLE.test(v.title));
 
-  // Subsequent-page fetcher (refills queue when running low).
-  // Separate from the initial load so the StrictMode double-invoke
-  // of the mount effect can't race with this and skip setLoading.
   const fetchMore = async () => {
     if (fetching.current) return;
     fetching.current = true;
@@ -632,20 +326,12 @@ function SwipeStep({
       const extra = getNextExtra();
       const items = await fetchShorts(location, pageRef.current, extra);
       pageRef.current++;
-      const fresh = spreadSimilar(shuffle(
-        filterRelevant(items.filter((v) => !seenIds.current.has(v.videoId))),
-      ));
+      const fresh = spreadSimilar(shuffle(filterRelevant(items.filter((v) => !seenIds.current.has(v.videoId)))));
       fresh.forEach((v) => seenIds.current.add(v.videoId));
       if (fresh.length > 0) setQueue((prev) => [...prev, ...fresh]);
-    } catch {
-      // silent — keep existing queue for refill failures
-    } finally {
-      fetching.current = false;
-    }
+    } catch { /* silent */ } finally { fetching.current = false; }
   };
 
-  // Initial load — uses an `active` flag so React StrictMode's double-invoke
-  // doesn't fire setLoading(false) before the real fetch completes.
   useEffect(() => {
     let active = true;
     const startPage = pageRef.current;
@@ -655,27 +341,19 @@ function SwipeStep({
         const items = await fetchShorts(location, startPage, extra);
         if (!active) return;
         pageRef.current = startPage + 1;
-        const fresh = spreadSimilar(shuffle(
-          filterRelevant(items.filter((v) => !seenIds.current.has(v.videoId))),
-        ));
+        const fresh = spreadSimilar(shuffle(filterRelevant(items.filter((v) => !seenIds.current.has(v.videoId)))));
         fresh.forEach((v) => seenIds.current.add(v.videoId));
         if (fresh.length > 0) setQueue(fresh);
         else setError("No videos found for this location.");
       } catch {
-        if (active)
-          setError(
-            "Couldn't load shorts — is the shorts backend running? (node shorts-backend/server.js)",
-          );
+        if (active) setError("Couldn't load shorts — is the shorts backend running?");
       } finally {
         if (active) setLoading(false);
       }
     })();
-    return () => {
-      active = false;
-    };
+    return () => { active = false; };
   }, []);
 
-  // Mirror shorts/app.js: prefetch next 2, play current, pause previous
   useEffect(() => {
     if (queue.length === 0) return;
     for (let ahead = 1; ahead <= 2; ahead++) {
@@ -685,26 +363,18 @@ function SwipeStep({
     }
     const currentEl = videoRefs.current[index];
     if (currentEl) {
-      if (!currentEl.src)
-        currentEl.src = `/api/proxy?v=${queue[index].videoId}`;
+      if (!currentEl.src) currentEl.src = `/api/proxy?v=${queue[index].videoId}`;
       currentEl.play().catch(() => {});
     }
     if (index > 0) videoRefs.current[index - 1]?.pause();
-    // Refill feed when running low — uses updated weights so next batch is better targeted
     if (queue.length - index <= 5) fetchMore();
   }, [index, queue]);
 
-  // Update weights on each swipe, then let the next fetchMore use the new weights.
-  // Tags inferred from the video title that differ from the user's stated preferences
-  // get a heavier demerit on dislike, so the feed shifts away from them faster.
   const updateWeights = (video: ShortVideo, dir: "left" | "right") => {
     inferTags(video.title).forEach((tag) => {
       const w = weights.current[tag] ?? 0.3;
       const isDifferent = !initialTags.includes(tag);
-      weights.current[tag] =
-        dir === "right"
-          ? Math.min(2.0, w + 0.3)
-          : Math.max(0.0, w - (isDifferent ? 0.5 : 0.3));
+      weights.current[tag] = dir === "right" ? Math.min(2.0, w + 0.3) : Math.max(0.0, w - (isDifferent ? 0.5 : 0.3));
     });
   };
 
@@ -719,245 +389,154 @@ function SwipeStep({
       if (dir === "right") setLiked(newLiked);
       setAnimDir(null);
       animTimeout.current = null;
-      if (index + 1 >= queue.length) {
-        onDone(newLiked);
-      } else {
-        setIndex((i) => i + 1);
-      }
+      if (index + 1 >= queue.length) onDone(newLiked);
+      else setIndex((i) => i + 1);
     }, 350);
   };
 
-  if (!loading && queue.length > 0 && index >= queue.length) {
-    onDone(liked);
-    return null;
-  }
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.key === "ArrowRight") swipe("right");
+      else if (e.key === "ArrowLeft") swipe("left");
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  });
+
+  if (!loading && queue.length > 0 && index >= queue.length) { onDone(liked); return null; }
 
   const current = queue[index];
   const remaining = queue.length - index;
 
   const cardAnim: React.CSSProperties = {
-    transition: "transform 0.35s ease, opacity 0.35s ease",
-    transform:
-      animDir === "right"
-        ? "translateX(120%) rotate(15deg)"
-        : animDir === "left"
-          ? "translateX(-120%) rotate(-15deg)"
-          : "none",
+    transition: "transform 0.35s var(--m3-easing-emph), opacity 0.35s var(--m3-easing-emph)",
+    transform: animDir === "right" ? "translateX(120%) rotate(14deg)" : animDir === "left" ? "translateX(-120%) rotate(-14deg)" : "none",
     opacity: animDir ? 0 : 1,
   };
 
   return (
-    <div
-      style={{
-        ...s.card,
-        maxWidth: "900px",
-        display: "grid",
-        gridTemplateColumns: "340px 1fr",
-        gap: "3rem",
-        alignItems: "center",
-      }}
-    >
-      {/* Left: video card */}
-      <div style={{ position: "relative" }}>
-        {current && index + 1 < queue.length && (
-          <div
-            style={{
-              position: "absolute",
-              inset: "8px -4px -8px",
-              background: "#222",
-              borderRadius: "16px",
-              zIndex: 0,
-            }}
-          />
-        )}
-        <div style={{ ...cardAnim, position: "relative", zIndex: 1 }}>
-          <div
-            style={{
-              position: "relative",
-              paddingTop: "177.78%",
-              borderRadius: "12px",
-              overflow: "hidden",
-              background: "#111",
-            }}
-          >
-            {loading ? (
-              <div
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "#888",
-                }}
-              >
-                Loading shorts…
-              </div>
-            ) : error ? (
-              <div
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  padding: "1rem",
-                  color: "#888",
-                  fontSize: "0.85rem",
-                  textAlign: "center",
-                }}
-              >
-                {error}
-              </div>
-            ) : (
-              // All video elements kept in DOM with stable position-based keys.
-              // Only the current one is visible; src is set lazily — no re-mounts on swipe.
-              queue.map((_, i) => (
-                <video
-                  key={i}
-                  ref={(el) => {
-                    videoRefs.current[i] = el;
-                  }}
-                  loop
-                  muted
-                  playsInline
-                  preload="auto"
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    width: "100%",
-                    height: "100%",
-                    objectFit: "cover",
-                    display: i === index ? "block" : "none",
-                  }}
-                />
-              ))
-            )}
-          </div>
-          {current && (
-            <div style={{ padding: "0.6rem 0.2rem" }}>
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: "0.82rem",
-                  color: "#ccc",
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                }}
-              >
-                {current.title}
-              </p>
-              <p
-                style={{
-                  margin: "0.2rem 0 0",
-                  fontSize: "0.75rem",
-                  color: "#666",
-                }}
-              >
-                {current.uploader}
-              </p>
-            </div>
-          )}
-        </div>
+    <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+      {/* App bar */}
+      <div className="m3-appbar">
+        <M3IconBtn icon="arrow_back" onClick={onBack} />
+        <div className="title">Swipe to inspire</div>
+        <div style={{ padding: "0 16px" }}><StepBar step={1} /></div>
       </div>
 
-      {/* Right: instructions + buttons */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-        <div>
-          <h2 style={{ margin: "0 0 0.5rem", fontSize: "1.6rem" }}>
-            Swipe to build your trip
-          </h2>
-          <p style={{ color: "#888", fontSize: "0.95rem", lineHeight: 1.6 }}>
-            Like the videos that match your travel vibe. We'll use them to
-            personalise your itinerary.
-          </p>
+      <div
+        style={{
+          flex: 1,
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1fr) minmax(280px, 360px)",
+          gap: 32,
+          padding: "12px 32px 24px",
+          alignItems: "center",
+          maxWidth: 1100,
+          width: "100%",
+          margin: "0 auto",
+          overflow: "hidden",
+        }}
+      >
+        {/* Video card deck */}
+        <div style={{ position: "relative", maxWidth: 380, justifySelf: "center", width: "100%", aspectRatio: "9/16" }}>
+          {/* Shadow card */}
+          {current && index + 1 < queue.length && (
+            <div
+              className="short-card"
+              style={{ position: "absolute", inset: 0, transform: "translate(8px, 12px) rotate(2deg) scale(0.96)", opacity: 0.6, background: "var(--m3-surface-container-high)" }}
+            />
+          )}
+
+          {/* Main card */}
+          <div style={{ position: "absolute", inset: 0, ...cardAnim, boxShadow: "0 24px 60px var(--m3-shadow)", borderRadius: "var(--m3-corner-xl)", overflow: "hidden" }}>
+            {/* Videos */}
+            <div style={{ position: "relative", width: "100%", height: "100%", background: "var(--m3-surface-container-highest)" }}>
+              {loading ? (
+                <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 12 }}>
+                  <div className="m3-blob" style={{ width: 80, height: 80, animation: "m3-blob1 4s ease-in-out infinite" }} />
+                  <span style={{ color: "var(--m3-on-surface-variant)", fontSize: 14 }}>Loading shorts…</span>
+                </div>
+              ) : error ? (
+                <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "1.5rem", textAlign: "center", color: "var(--m3-on-surface-variant)", fontSize: 14 }}>
+                  {error}
+                </div>
+              ) : (
+                queue.map((_, i) => (
+                  <video
+                    key={i}
+                    ref={(el) => { videoRefs.current[i] = el; }}
+                    loop muted playsInline preload="auto"
+                    style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", objectFit: "cover", display: i === index ? "block" : "none" }}
+                  />
+                ))
+              )}
+            </div>
+
+            {/* Swipe stamps */}
+            {current && (
+              <>
+                <div style={{ position: "absolute", top: 80, left: 24, padding: "8px 16px", borderRadius: 10, border: "4px solid #34d399", color: "#34d399", fontWeight: 700, fontSize: 22, transform: "rotate(-12deg)", opacity: animDir === "right" ? 1 : 0, transition: "opacity .15s" }}>LIKED</div>
+                <div style={{ position: "absolute", top: 80, right: 24, padding: "8px 16px", borderRadius: 10, border: "4px solid #f87171", color: "#f87171", fontWeight: 700, fontSize: 22, transform: "rotate(12deg)", opacity: animDir === "left" ? 1 : 0, transition: "opacity .15s" }}>SKIP</div>
+              </>
+            )}
+
+            {/* Video info overlay */}
+            {current && !loading && !error && (
+              <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "48px 16px 16px", background: "linear-gradient(to top, rgba(0,0,0,.7), transparent)", color: "white" }}>
+                <div style={{ fontSize: 12, opacity: 0.85, marginBottom: 4 }}>{current.uploader}</div>
+                <div style={{ fontSize: 14, fontWeight: 500, lineHeight: 1.3, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as const }}>{current.title}</div>
+              </div>
+            )}
+          </div>
         </div>
 
-        <div
-          style={{
-            background: "#111",
-            borderRadius: "10px",
-            padding: "1rem 1.2rem",
-            lineHeight: 2,
-          }}
-        >
-          <div>
-            <span style={{ color: "#888" }}>Location:</span>{" "}
-            <strong>{location}</strong>
+        {/* Controls panel */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+          {/* Trip context */}
+          <div className="m3-card filled" style={{ padding: 20 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+              <Sym name="location_on" size={20} fill={1} style={{ color: "var(--m3-primary)" }} />
+              <div style={{ fontSize: 16, fontWeight: 500 }}>{location}</div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <div style={{ background: "var(--m3-surface-container-low)", borderRadius: 12, padding: "10px 12px" }}>
+                <div style={{ fontSize: 11, color: "var(--m3-on-surface-variant)", textTransform: "uppercase", letterSpacing: ".06em" }}>Liked</div>
+                <div className="display-font" style={{ fontSize: 24, fontWeight: 500, color: "var(--m3-primary)" }}>{liked.length}</div>
+              </div>
+              <div style={{ background: "var(--m3-surface-container-low)", borderRadius: 12, padding: "10px 12px" }}>
+                <div style={{ fontSize: 11, color: "var(--m3-on-surface-variant)", textTransform: "uppercase", letterSpacing: ".06em" }}>Remaining</div>
+                <div className="display-font" style={{ fontSize: 24, fontWeight: 500 }}>{loading ? "…" : remaining}</div>
+              </div>
+            </div>
           </div>
-          <div>
-            <span style={{ color: "#888" }}>Remaining:</span>{" "}
-            <strong>{loading ? "…" : remaining}</strong>
+
+          {/* FAB controls */}
+          <div style={{ display: "flex", gap: 14, alignItems: "center", justifyContent: "center" }}>
+            <M3FAB icon="close" onClick={() => swipe("left")} disabled={loading || !!error} />
+            <M3FAB icon="favorite" variant="primary" size="large" onClick={() => swipe("right")} disabled={loading || !!error} />
+            <M3FAB icon="bookmark" onClick={() => swipe("right")} disabled={loading || !!error} />
           </div>
-          <div>
-            <span style={{ color: "#888" }}>Liked so far:</span>{" "}
-            <strong>{liked.length}</strong>
+          <div style={{ textAlign: "center", fontSize: 12, color: "var(--m3-on-surface-variant)" }}>
+            Skip · Love it · Save for later
+          </div>
+
+          {/* Keyboard hint + done */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 4px" }}>
+            <div style={{ fontSize: 12, color: "var(--m3-on-surface-variant)" }}>
+              <kbd style={{ padding: "2px 6px", background: "var(--m3-surface-container-high)", borderRadius: 4, fontFamily: "monospace" }}>←</kbd> skip &nbsp;
+              <kbd style={{ padding: "2px 6px", background: "var(--m3-surface-container-high)", borderRadius: 4, fontFamily: "monospace" }}>→</kbd> love
+            </div>
+            <M3Button variant="text" onClick={() => onDone(liked)} disabled={liked.length === 0}>
+              I'm done →
+            </M3Button>
           </div>
         </div>
-
-
-        <div
-          style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}
-        >
-          <button
-            onClick={() => swipe("right")}
-            disabled={loading || !!error}
-            style={{
-              ...s.btn,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "0.6rem",
-              padding: "0.9rem 1.5rem",
-              fontSize: "1rem",
-              opacity: loading || !!error ? 0.5 : 1,
-            }}
-          >
-            Love it
-          </button>
-          <button
-            onClick={() => swipe("left")}
-            disabled={loading || !!error}
-            style={{
-              ...s.btnGhost,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "0.6rem",
-              padding: "0.9rem 1.5rem",
-              fontSize: "1rem",
-              opacity: loading || !!error ? 0.5 : 1,
-            }}
-          >
-            Skip
-          </button>
-          <button
-            onClick={() => onDone(liked)}
-            style={{
-              padding: "0.7rem 1.5rem",
-              borderRadius: "8px",
-              border: "1px solid #333",
-              background: "transparent",
-              color: "#666",
-              fontSize: "0.9rem",
-              cursor: "pointer",
-            }}
-          >
-            Done — use {liked.length} liked video{liked.length !== 1 ? "s" : ""}
-          </button>
-        </div>
-
-        <p style={{ color: "#555", fontSize: "0.82rem" }}>
-          Tip: you can also use keyboard shortcuts — → to like, ← to skip.
-        </p>
       </div>
     </div>
   );
 }
 
-// ── Step 3: Review & Generate ─────────────────────────────────────────────────
+// ── Review step ───────────────────────────────────────────────────────────────
 function ReviewStep({
   tripData,
   likedVideos,
@@ -972,115 +551,96 @@ function ReviewStep({
   generating?: boolean;
 }) {
   return (
-    <div style={s.card}>
-      <h2 style={{ marginTop: 0, marginBottom: "1.5rem", fontSize: "1.6rem" }}>
-        Review your trip
-      </h2>
+    <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+      <div className="m3-appbar">
+        <M3IconBtn icon="arrow_back" onClick={onBack} />
+        <div className="title">Review</div>
+        <div style={{ padding: "0 16px" }}><StepBar step={2} /></div>
+      </div>
 
-      {/* Two-column: summary left, liked videos right */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: likedVideos.length > 0 ? "1fr 1fr" : "1fr",
-          gap: "2rem",
-          marginBottom: "2rem",
-        }}
-      >
-        <div
-          style={{
-            background: "#111",
-            borderRadius: "10px",
-            padding: "1.2rem",
-            lineHeight: 2.2,
-          }}
-        >
+      <div style={{ flex: 1, overflow: "auto", padding: "12px 32px 120px", display: "flex", justifyContent: "center" }}>
+        <div style={{ width: "100%", maxWidth: 800, display: "flex", flexDirection: "column", gap: 24 }}>
           <div>
-            <span style={{ color: "#888" }}>Destination:</span>{" "}
-            <strong>{tripData.location}</strong>
-          </div>
-          {tripData.seasons.length > 0 && (
-            <div>
-              <span style={{ color: "#888" }}>Season:</span>{" "}
-              <strong>{tripData.seasons.join(", ")}</strong>
-            </div>
-          )}
-          <div>
-            <span style={{ color: "#888" }}>Vibes:</span>{" "}
-            <strong>{tripData.tags.join(", ")}</strong>
-          </div>
-          {tripData.comments && (
-            <div>
-              <span style={{ color: "#888" }}>Notes:</span>{" "}
-              <strong>{tripData.comments}</strong>
-            </div>
-          )}
-          <div>
-            <span style={{ color: "#888" }}>Videos liked:</span>{" "}
-            <strong>{likedVideos.length}</strong>
-          </div>
-        </div>
-
-        {likedVideos.length > 0 && (
-          <div style={{ minWidth: 0 }}>
-            <p
-              style={{
-                color: "#aaa",
-                fontSize: "0.9rem",
-                marginBottom: "0.8rem",
-              }}
-            >
-              Your liked videos:
+            <h1 className="display-font" style={{ fontSize: 36, fontWeight: 500, margin: 0, letterSpacing: "-0.01em" }}>Looks good?</h1>
+            <p style={{ color: "var(--m3-on-surface-variant)", marginTop: 6 }}>
+              We'll build a {tripData.days}-day plan for {tripData.location} from {likedVideos.length} videos you liked.
             </p>
-            <div
-              style={{
-                display: "flex",
-                gap: "0.6rem",
-                overflowX: "auto",
-                paddingBottom: "0.5rem",
-              }}
-            >
-              {likedVideos.map((id) => (
-                <div key={id} style={{ flexShrink: 0, width: "100px" }}>
-                  <div
-                    style={{
-                      position: "relative",
-                      paddingTop: "177.78%",
-                      borderRadius: "8px",
-                      overflow: "hidden",
-                      background: "#111",
-                    }}
-                  >
-                    <img
-                      src={`https://i.ytimg.com/vi/${id}/hqdefault.jpg`}
-                      alt="liked short"
-                      style={{
-                        position: "absolute",
-                        top: 0,
-                        left: 0,
-                        width: "100%",
-                        height: "100%",
-                        objectFit: "cover",
-                      }}
-                    />
-                  </div>
-                </div>
+          </div>
+
+          {/* Summary card */}
+          <div className="m3-card filled" style={{ padding: 0, overflow: "hidden" }}>
+            <div style={{ padding: "20px 24px", borderBottom: "1px solid var(--m3-outline-variant)" }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--m3-primary)", letterSpacing: ".06em", textTransform: "uppercase" }}>Trip summary</div>
+              <div className="display-font" style={{ fontSize: 28, fontWeight: 500, marginTop: 4 }}>{tripData.location}</div>
+              <div style={{ color: "var(--m3-on-surface-variant)", marginTop: 2 }}>
+                {tripData.days} days · {tripData.season}
+              </div>
+            </div>
+            <div style={{ padding: 16, display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {tripData.tags.map((tag) => (
+                <span
+                  key={tag}
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 6,
+                    padding: "6px 12px", borderRadius: 8,
+                    background: "var(--m3-surface-container-low)", fontSize: 13, fontWeight: 500,
+                  }}
+                >
+                  {TAG_ICONS[tag] && <Sym name={TAG_ICONS[tag]!} size={16} />} {tag}
+                </span>
               ))}
             </div>
           </div>
-        )}
+
+          {/* Liked videos */}
+          {likedVideos.length > 0 && (
+            <div>
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 12 }}>
+                <h2 className="display-font" style={{ fontSize: 20, fontWeight: 500, margin: 0 }}>
+                  Inspired by {likedVideos.length} video{likedVideos.length !== 1 ? "s" : ""}
+                </h2>
+                <M3Button variant="text" icon="refresh" onClick={onBack}>Swipe more</M3Button>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))", gap: 12 }}>
+                {likedVideos.map((id) => (
+                  <div key={id} style={{ aspectRatio: "9/16", position: "relative", overflow: "hidden", borderRadius: 16 }}>
+                    <img
+                      src={`https://i.ytimg.com/vi/${id}/hqdefault.jpg`}
+                      alt="liked short"
+                      style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", objectFit: "cover" }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {tripData.comments && (
+            <div className="m3-card outlined" style={{ padding: 16 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--m3-on-surface-variant)", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}>Your notes</div>
+              <div style={{ fontSize: 14 }}>{tripData.comments}</div>
+            </div>
+          )}
+        </div>
       </div>
 
-      <div style={{ display: "flex", gap: "1rem" }}>
-        <button style={s.btnGhost} onClick={onBack}>
-          ← Back
-        </button>
-        <button
-          style={{ ...s.btn, flex: 1, opacity: generating ? 0.6 : 1 }}
+      <div
+        style={{
+          position: "sticky", bottom: 0, padding: 16,
+          background: "linear-gradient(to top, var(--m3-surface) 60%, transparent)",
+          display: "flex", justifyContent: "flex-end", gap: 12,
+          borderTop: "1px solid var(--m3-outline-variant)",
+        }}
+      >
+        <M3Button variant="outlined" icon="arrow_back" onClick={onBack}>Back</M3Button>
+        <M3Button
+          icon="auto_awesome"
           onClick={onGenerate}
           disabled={generating}
+          style={{ opacity: generating ? 0.6 : 1 }}
         >
-          {generating ? "Generating…" : "Generate My Itinerary"}
-        </button>
+          {generating ? "Generating…" : "Generate itinerary"}
+        </M3Button>
       </div>
     </div>
   );
@@ -1098,40 +658,29 @@ export default function FormScreen() {
     setGenerating(true);
     try {
       const prompt = [
-        "Create a one-day travel plan",
+        `Create a ${tripData!.days}-day travel plan`,
         ` - Location: ${tripData!.location}`,
         " - Start time: 08:00",
         " - End time: 21:00",
         ` - Activities: ${tripData!.tags.join(", ")}`,
-        tripData!.seasons.length > 0
-          ? ` - Season: ${tripData!.seasons.join(", ")}`
-          : null,
+        ` - Season: ${tripData!.season}`,
         tripData!.comments ? ` - Special notes: ${tripData!.comments}` : null,
-      ]
-        .filter(Boolean)
-        .join("\n");
+      ].filter(Boolean).join("\n");
 
-      const videoUrls = likedVideos
-        .map((id) => `https://www.youtube.com/watch?v=${id}`)
-        .join(",");
+      const videoUrls = likedVideos.map((id) => `https://www.youtube.com/watch?v=${id}`).join(",");
       const params = new URLSearchParams({ prompt });
       if (videoUrls) params.set("video_urls", videoUrls);
 
-      const res = await fetch(`/itinerary-api/generate_itinerary?${params}`, {
-        method: "POST",
-      });
+      const res = await fetch(`/itinerary-api/generate_itinerary?${params}`, { method: "POST" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      const itinerary = { location: tripData!.location, ...data.itinerary };
+      const itinerary = { location: tripData!.location, days: tripData!.days, ...data.itinerary };
       localStorage.setItem("itinerary", JSON.stringify(itinerary));
       localStorage.setItem("liked_videos", JSON.stringify(likedVideos));
       navigate("/your-trip");
     } catch (e) {
       console.error("Itinerary backend unavailable, using mock:", e);
-      const itinerary = MOCK_ITINERARY(
-        tripData!.location,
-        tripData!.tags.map(String),
-      );
+      const itinerary = MOCK_ITINERARY(tripData!.location, tripData!.tags.map(String));
       localStorage.setItem("itinerary", JSON.stringify(itinerary));
       localStorage.setItem("liked_videos", JSON.stringify(likedVideos));
       navigate("/your-trip");
@@ -1141,25 +690,18 @@ export default function FormScreen() {
   };
 
   return (
-    <div style={s.page}>
-      <StepBar step={step} />
+    <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
       {step === 0 && (
         <TripDetailsStep
-          onNext={(data) => {
-            setTripData(data);
-            setStep(1);
-          }}
+          onNext={(data) => { setTripData(data); setStep(1); }}
+          onBack={() => navigate("/")}
         />
       )}
       {step === 1 && tripData && (
         <SwipeStep
-          location={tripData.location}
-          initialTags={tripData.tags}
-          seasons={tripData.seasons}
-          onDone={(liked) => {
-            setLikedVideos(liked);
-            setStep(2);
-          }}
+          tripData={tripData}
+          onDone={(liked) => { setLikedVideos(liked); setStep(2); }}
+          onBack={() => setStep(0)}
         />
       )}
       {step === 2 && tripData && (
