@@ -152,17 +152,4 @@ All three services need to be running at the same time for the full flow to work
 
 ---
 
-## Building for production
-
-```bash
-cd frontend-main
-npm run build   # outputs to frontend-main/dist
-```
-
-The `public/_redirects` file is included for Netlify-style SPA deployments. For other hosts, configure your server to serve `index.html` for all routes.
-
-The two backends can be deployed as standard WSGI (Flask via `wsgi.py`) and Node.js processes respectively. Make sure the frontend's proxy targets are updated to the production URLs, or configure your reverse proxy (nginx, Caddy, etc.) to route `/api/*` and `/itinerary-api/*` to the correct services.
-
----
-
 Made with ❤️ by the Soar Team
